@@ -1,0 +1,29 @@
+G3 diff, production build vs the live deployment (readfast-site.pages.dev, source b11ea70), 2026-11-27T22:03:29Z
+404.html: same
+_headers: (not served; compare by hand)
+download.html: same
+guides.html: same
+help.html: -2 +2
+hero.js: same
+how-to-read-faster.html: same
+index.html: same
+llms.txt: same
+pricing.html: same
+privacy.html: -1 +8
+reading-speed-test.html: -5 +23
+reading-test.js: -0 +7
+return.html: same
+robots.txt: same
+send-to-pc.js: -0 +6
+site.css: -0 +18
+sitemap.xml: same
+speed-reader-for-windows.html: same
+speed-reading-apps-for-windows.html: same
+speed-test-experiment.js: live 404 (new file?)
+terms.html: same
+try-it.css: same
+try-it.js: same
+what-is-rsvp-reading.html: same
+_headers: CSP gains connect-src https://edge.api.flagsmith.com https://events.api.flagsmith.com
+media/readsharp-demo-transcript.txt, media/readsharp-demo.vtt, sparseread-icon.svg: replaced with the live bytes (differed only by CRLF)
+Backup: C:\Users\oveva\ReadSharpBackups\site-2026-11-27_1702-EST, 31/31 files byte-identical to the live deployment

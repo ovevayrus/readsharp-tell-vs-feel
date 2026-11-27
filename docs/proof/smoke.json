@@ -1,0 +1,42 @@
+{
+  "mode": "smoke",
+  "page": "https://readsharp.app/reading-speed-test",
+  "started": "2026-11-27T22:07:40.383Z",
+  "arm": "tell",
+  "served": {
+    "value": "tell",
+    "enabled": true,
+    "experiment": null
+  },
+  "identifier": "6ed2e085-20f4-4df6-a32e-89eea636abf1",
+  "events": [],
+  "flagsmith": [
+    {
+      "method": "GET",
+      "path": "/api/v1/identities/",
+      "identifier": "6ed2e085-20f4-4df6-a32e-89eea636abf1",
+      "transient": "true",
+      "sentAt": "2026-11-27T22:07:41.296Z",
+      "status": 200,
+      "answeredAt": "2026-11-27T22:07:41.686Z",
+      "served": {
+        "value": "tell",
+        "enabled": true,
+        "experiment": null
+      },
+      "events": []
+    }
+  ],
+  "csp": [],
+  "checks": {
+    "resultIsTell": true,
+    "noExposureSent": true,
+    "noEventsSent": true,
+    "apiServesTell": true,
+    "noExperimentInFlags": true,
+    "oneFlagsRequest": true,
+    "noCspErrors": true,
+    "allFlagsmith2xx": true
+  },
+  "pass": true
+}

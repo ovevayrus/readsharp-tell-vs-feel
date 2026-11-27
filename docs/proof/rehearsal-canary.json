@@ -1,0 +1,90 @@
+{
+  "mode": "canary",
+  "page": "https://flagsmith-dev-preview.readfast-site.pages.dev/reading-speed-test?canary",
+  "started": "2026-11-27T22:07:23.219Z",
+  "arm": "feel",
+  "served": {
+    "value": "feel",
+    "enabled": true,
+    "experiment": {
+      "id": 958,
+      "in_experiment": true,
+      "name": "Tell vs Feel"
+    }
+  },
+  "identifier": "canary-876205ab-4e99-414f-b6a9-cc6807d77e1e",
+  "events": [
+    {
+      "event": "$flag_exposure",
+      "identifier": "canary-876205ab-4e99-414f-b6a9-cc6807d77e1e",
+      "value": "feel",
+      "experiment": 958,
+      "status": 202,
+      "sentAt": "2026-11-27T22:07:24.274Z"
+    },
+    {
+      "event": "get_readsharp",
+      "identifier": "canary-876205ab-4e99-414f-b6a9-cc6807d77e1e",
+      "value": null,
+      "experiment": null,
+      "status": 202,
+      "sentAt": "2026-11-27T22:07:25.036Z"
+    }
+  ],
+  "flagsmith": [
+    {
+      "method": "GET",
+      "path": "/api/v1/identities/",
+      "identifier": "canary-876205ab-4e99-414f-b6a9-cc6807d77e1e",
+      "transient": "true",
+      "sentAt": "2026-11-27T22:07:23.772Z",
+      "status": 200,
+      "answeredAt": "2026-11-27T22:07:24.172Z",
+      "served": {
+        "value": "feel",
+        "enabled": true,
+        "experiment": {
+          "id": 958,
+          "in_experiment": true,
+          "name": "Tell vs Feel"
+        }
+      },
+      "events": []
+    },
+    {
+      "method": "POST",
+      "path": "/v1/events",
+      "identifier": null,
+      "transient": null,
+      "sentAt": "2026-11-27T22:07:24.274Z",
+      "status": 202,
+      "answeredAt": "2026-11-27T22:07:24.974Z",
+      "events": [
+        "$flag_exposure"
+      ]
+    },
+    {
+      "method": "POST",
+      "path": "/v1/events",
+      "identifier": null,
+      "transient": null,
+      "sentAt": "2026-11-27T22:07:25.036Z",
+      "status": 202,
+      "answeredAt": "2026-11-27T22:07:25.202Z",
+      "events": [
+        "get_readsharp"
+      ]
+    }
+  ],
+  "csp": [],
+  "checks": {
+    "canaryIdentity": true,
+    "exposure2xx": true,
+    "getReadsharp2xx": true,
+    "inExperiment": true,
+    "oneFlagsRequest": true,
+    "noCspErrors": true,
+    "allFlagsmith2xx": true
+  },
+  "pass": true
+}

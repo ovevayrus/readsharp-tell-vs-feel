@@ -1,0 +1,90 @@
+{
+  "mode": "smoke",
+  "page": "https://flagsmith-dev-preview.readfast-site.pages.dev/reading-speed-test",
+  "started": "2026-11-27T22:07:26.535Z",
+  "arm": "tell",
+  "served": {
+    "value": "tell",
+    "enabled": true,
+    "experiment": {
+      "id": 958,
+      "in_experiment": true,
+      "name": "Tell vs Feel"
+    }
+  },
+  "identifier": "9661c549-ac34-49e0-8ca9-6c725d5f6e8b",
+  "events": [
+    {
+      "event": "$flag_exposure",
+      "identifier": "9661c549-ac34-49e0-8ca9-6c725d5f6e8b",
+      "value": "control",
+      "experiment": 958,
+      "status": 202,
+      "sentAt": "2026-11-27T22:07:27.654Z"
+    },
+    {
+      "event": "get_readsharp",
+      "identifier": "9661c549-ac34-49e0-8ca9-6c725d5f6e8b",
+      "value": null,
+      "experiment": null,
+      "status": 202,
+      "sentAt": "2026-11-27T22:07:28.400Z"
+    }
+  ],
+  "flagsmith": [
+    {
+      "method": "GET",
+      "path": "/api/v1/identities/",
+      "identifier": "9661c549-ac34-49e0-8ca9-6c725d5f6e8b",
+      "transient": "true",
+      "sentAt": "2026-11-27T22:07:27.133Z",
+      "status": 200,
+      "answeredAt": "2026-11-27T22:07:27.567Z",
+      "served": {
+        "value": "tell",
+        "enabled": true,
+        "experiment": {
+          "id": 958,
+          "in_experiment": true,
+          "name": "Tell vs Feel"
+        }
+      },
+      "events": []
+    },
+    {
+      "method": "POST",
+      "path": "/v1/events",
+      "identifier": null,
+      "transient": null,
+      "sentAt": "2026-11-27T22:07:27.654Z",
+      "status": 202,
+      "answeredAt": "2026-11-27T22:07:28.347Z",
+      "events": [
+        "$flag_exposure"
+      ]
+    },
+    {
+      "method": "POST",
+      "path": "/v1/events",
+      "identifier": null,
+      "transient": null,
+      "sentAt": "2026-11-27T22:07:28.400Z",
+      "status": 202,
+      "answeredAt": "2026-11-27T22:07:28.571Z",
+      "events": [
+        "get_readsharp"
+      ]
+    }
+  ],
+  "csp": [],
+  "checks": {
+    "resultIsTell": true,
+    "noExposureSent": false,
+    "noEventsSent": false,
+    "apiServesTell": true,
+    "oneFlagsRequest": true,
+    "noCspErrors": true,
+    "allFlagsmith2xx": true
+  },
+  "pass": false
+}
