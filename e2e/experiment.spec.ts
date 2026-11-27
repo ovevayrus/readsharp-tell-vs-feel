@@ -10,13 +10,20 @@ const EDGE = 'https://edge.api.flagsmith.com';
 const EVENTS = 'https://events.api.flagsmith.com';
 const FLAGSMITH = [EDGE, EVENTS];
 const EXPERIMENT_ID = 958;
+// E2E_EXPECT_TRANSIENT=0 checks the pre-approved persistent-ID fallback (G2 item 3) instead.
+const EXPECT_TRANSIENT = process.env.E2E_EXPECT_TRANSIENT !== '0';
 // Chromium on Windows resolves navigator.share before a target is chosen, so the site copies to the
 // clipboard there instead; the native-share cases use a macOS user agent.
 const MAC_UA = 'Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/134.0.0.0 Safari/537.36';
 const WINDOWS_UA = 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/134.0.0.0 Safari/537.36';
 
-type Sent = { event: string; identifier: string | null; value: string | null; metadata: Record<string, unknown> | null; feature_name: string | null };
-type Req = { url: string; origin: string; method: string; at: number; status?: number; events: Sent[] };
+type Sent = { event: string; identifier: string | null; value: string | null; metadata: Record<string, unknown> | null; feature_name: string | null; timestamp?: number };
+type Req = { url: string; origin: string; method: string; at: number; status?: number; failed?: string; events: Sent[] };
+
+// The SDK delivers events at least once: when an events request outlives its 3 s timeout it
+// sends the same batch again (same timestamps). Events are therefore counted once per
+// (event, identifier, timestamp), and each must reach Flagsmith in a 2xx response at least once.
+const eventKey = (e: Sent) => `${e.event}|${e.identifier}|${e.timestamp}`;
 
 /** Records every request of a context, with parsed Flagsmith event batches and response codes. */
 function record(context: BrowserContext) {
@@ -36,9 +43,20 @@ function record(context: BrowserContext) {
 		const entry = byRequest.get(response.request());
 		if (entry) entry.status = response.status();
 	});
+	context.on('requestfailed', (request) => {
+		const entry = byRequest.get(request);
+		if (entry) entry.failed = request.failure()?.errorText ?? 'failed';
+	});
 	const flagsmith = () => reqs.filter((r) => FLAGSMITH.includes(r.origin));
-	const sent = () => flagsmith().flatMap((r) => r.events.map((e) => ({ ...e, at: r.at })));
-	return { reqs, flagsmith, sent };
+	/** Distinct events, each with the time it was first sent. */
+	const sent = () => {
+		const first = new Map<string, Sent & { at: number }>();
+		for (const r of flagsmith()) for (const e of r.events) if (!first.has(eventKey(e))) first.set(eventKey(e), { ...e, at: r.at });
+		return [...first.values()];
+	};
+	const settled = () => flagsmith().every((r) => r.status !== undefined || r.failed !== undefined);
+	const delivered = (e: Sent) => flagsmith().some((r) => r.status! >= 200 && r.status! < 300 && r.events.some((x) => eventKey(x) === eventKey(e)));
+	return { reqs, flagsmith, sent, settled, delivered, wrongKey: [] as string[] };
 }
 
 /** Spies installed before any page script: storage, cookies, IndexedDB, CSP violations, share. */
@@ -91,18 +109,32 @@ async function newSession(browser: Browser, options: BrowserContextOptions & { g
 	const context = await browser.newContext(contextOptions);
 	await instrument(context, { gpc, share, clipboard });
 	const rec = record(context);
+	// Every Flagsmith request must carry the Development key. Anything else is stopped before it
+	// leaves the browser, so a mis-keyed build can never send test traffic to Production.
+	const devKey = process.env.FS_DEV_CLIENT_KEY;
+	await context.route((url) => FLAGSMITH.includes(url.origin), (route) => {
+		const request = route.request();
+		if (request.method() === 'OPTIONS' || request.headers()['x-environment-key'] === devKey) return route.continue();
+		rec.wrongKey.push(`${request.method()} ${new URL(request.url()).pathname}`);
+		return route.abort('blockedbyclient');
+	});
 	const page = await context.newPage();
 	const consoleCsp: string[] = [];
 	page.on('console', (m) => { if (/Content Security Policy/i.test(m.text())) consoleCsp.push(m.text()); });
 	await page.clock.install();
+	recorders.set(page, rec);
 	return { context, page, rec, consoleCsp };
 }
 
 /** Plays one passage through to its result. Returns the time the result was submitted. */
-async function readPassage(page: Page, rec?: ReturnType<typeof record>, before?: { exposuresBeforeSubmit?: number }) {
+/** Each page's request recorder, so every passage waits for in-flight Flagsmith responses. */
+const recorders = new WeakMap<Page, ReturnType<typeof record>>();
+
+async function readPassage(page: Page, given?: ReturnType<typeof record>, before?: { exposuresBeforeSubmit?: number }) {
+	const rec = given ?? recorders.get(page);
 	// Fast-forwarding the fake clock would also fire the SDK's 3 s request timeout on a flush still
 	// in flight, and the SDK would then resend that batch. Let in-flight requests finish first.
-	if (rec) await waitFor(() => rec.flagsmith().every((r) => r.status !== undefined), 8000);
+	if (rec) await waitFor(() => rec.settled(), 8000);
 	await page.locator('[data-test-start]').click();
 	await page.clock.fastForward(60_000); // ~300 words in 60 s: about 300 wpm, past the 10 s minimum
 	await page.locator('[data-test-done]').click();
@@ -112,7 +144,7 @@ async function readPassage(page: Page, rec?: ReturnType<typeof record>, before?:
 	for (let i = 0; i < count; i++) await fields.nth(i).locator('input').first().check();
 	// A real visitor reads for at least 10 s, long enough for the flags requested at Start to
 	// arrive; the fake clock compresses that to a second or two, so wait for that response here.
-	if (rec) await waitFor(() => rec.flagsmith().every((r) => r.status !== undefined), 8000);
+	if (rec) await waitFor(() => rec.settled(), 8000);
 	const submittedAt = Date.now();
 	if (rec && before) before.exposuresBeforeSubmit = rec.sent().filter((e) => e.event === '$flag_exposure').length;
 	await page.locator('[data-test-questions] button[type="submit"]').click();
@@ -127,7 +159,8 @@ async function toResult(page: Page, query = '', rec?: ReturnType<typeof record>)
 
 const armOf = async (page: Page) => ((await page.locator('[data-feel-reader]').isVisible()) ? 'feel' : 'tell');
 
-async function waitFor(predicate: () => boolean, ms = 4000) {
+// Live Flagsmith round trips can take a few seconds, and the SDK sends one batch at a time.
+async function waitFor(predicate: () => boolean, ms = 8000) {
 	const end = Date.now() + ms;
 	while (!predicate() && Date.now() < end) await new Promise((r) => setTimeout(r, 50));
 	return predicate();
@@ -136,14 +169,19 @@ async function waitFor(predicate: () => boolean, ms = 4000) {
 async function expectClean(page: Page, rec: ReturnType<typeof record>, consoleCsp: string[], context: BrowserContext) {
 	const touched = await page.evaluate(() => (window as any).__touched);
 	expect(touched, 'no Storage, cookie or IndexedDB access').toEqual([]);
+	expect(rec.wrongKey, 'every Flagsmith request used the Development key').toEqual([]);
 	expect(await context.cookies(), 'no cookies').toEqual([]);
 	expect(await page.evaluate(() => (window as any).__csp), 'no CSP violations').toEqual([]);
 	expect(consoleCsp, 'no CSP console errors').toEqual([]);
-	expect(await waitFor(() => rec.flagsmith().every((r) => r.status !== undefined), 8000), 'every Flagsmith request answered').toBe(true);
-	for (const r of rec.flagsmith()) {
+	expect(await waitFor(() => rec.settled(), 12000), 'every Flagsmith request answered or abandoned by the SDK').toBe(true);
+	// Every response Flagsmith sent is 2xx (a request the SDK abandoned at its timeout has none)...
+	for (const r of rec.flagsmith().filter((x) => x.status !== undefined)) {
 		expect(r.status, `${r.method} ${new URL(r.url).pathname} must be 2xx`).toBeGreaterThanOrEqual(200);
 		expect(r.status!).toBeLessThan(300);
 	}
+	// ...the flags request was answered, and every distinct event reached Flagsmith with a 2xx.
+	expect(rec.flagsmith().some((r) => r.url.startsWith(`${EDGE}/api/v1/identities/`)) === rec.flagsmith().some((r) => r.url.startsWith(`${EDGE}/api/v1/identities/`) && r.status !== undefined), 'the flags request was answered').toBe(true);
+	for (const e of rec.sent()) expect(await waitFor(() => rec.delivered(e), 12000), `${e.event} delivered with a 2xx`).toBe(true);
 }
 
 const tally = { sessions: 0, reachedResult: 0, exposed: 0, clickedGetReadSharp: 0, shared: 0, arms: { tell: 0, feel: 0 } as Record<string, number> };
@@ -194,7 +232,7 @@ test('(a)(b)(c)(d)(e)(i) an eligible view: nothing before Start, one exposure, e
 	const identity = s.rec.flagsmith().find((r) => r.url.startsWith(`${EDGE}/api/v1/identities/`));
 	expect(identity, 'one identities request').toBeTruthy();
 	const params = new URL(identity!.url).searchParams;
-	expect(params.get('transient')).toBe('true');
+	expect(params.get('transient'), EXPECT_TRANSIENT ? 'transient identity' : 'persistent-ID fallback').toBe(EXPECT_TRANSIENT ? 'true' : null);
 	expect(params.get('identifier')).toBe(exposure.identifier);
 	tally.exposed++;
 	tally.arms[await armOf(s.page)]++;
@@ -283,9 +321,8 @@ test('(f) the installer event is delivered even though the click navigates away'
 	expect(delivered, 'installer_download was sent before leaving').toBeTruthy();
 	expect(navigationStartedAt, 'the page navigated to a different URL').toBeGreaterThan(0);
 	expect(delivered!.at, 'the installer_download POST was sent before the navigation started').toBeLessThanOrEqual(navigationStartedAt);
-	expect(await waitFor(() => delivered!.status !== undefined)).toBe(true);
-	expect(delivered!.status).toBeGreaterThanOrEqual(200);
-	expect(delivered!.status!).toBeLessThan(300);
+	const installerEvent = s.rec.sent().find((e) => e.event === 'installer_download')!;
+	expect(await waitFor(() => s.rec.delivered(installerEvent), 12000), 'installer_download reached Flagsmith with a 2xx').toBe(true);
 	await s.context.close();
 });
 

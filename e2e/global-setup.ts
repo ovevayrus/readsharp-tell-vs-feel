@@ -23,4 +23,17 @@ export default async function globalSetup() {
 	const list: any[] = Array.isArray(environments) ? environments : environments?.results ?? [];
 	const development = list.find((e) => e?.name === 'Development');
 	if (!development || typeof development.api_key !== 'string' || development.api_key !== key) throw new Error(notDev);
+
+	// Against a deployed preview the page brings its own key: it must be the Development key too.
+	const remote = process.env.E2E_BASE_URL?.replace(/\/$/, '');
+	if (remote) {
+		let html = '';
+		try {
+			html = await (await fetch(`${remote}/reading-speed-test`, { redirect: 'error' })).text();
+		} catch {
+			throw new Error('Could not read the deployed reading speed test page');
+		}
+		const embedded = [...html.matchAll(/data-flagsmith-env="([^"]*)"/g)].map((m) => m[1]);
+		if (!embedded.length || embedded.some((value) => value !== key)) throw new Error('The deployed page is not built with the Development key');
+	}
 }

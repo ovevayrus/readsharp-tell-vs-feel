@@ -4,8 +4,10 @@ import { assertNoChildProcessDebug } from './scripts/setup-flagsmith.mjs';
 // End-to-end privacy and wiring tests for the speed-test experiment, against the Flagsmith
 // DEVELOPMENT environment.
 //
-//   Local build:       READSHARP_DIST=<built site dir> npx playwright test
-//   Deployed preview:  E2E_BASE_URL=https://flagsmith-dev-preview.readfast-site.pages.dev npx playwright test
+//   Local build:       READSHARP_DIST=<built site dir> node node_modules/@playwright/test/cli.js test
+//   Deployed preview:  E2E_BASE_URL=https://flagsmith-dev-preview.readfast-site.pages.dev node node_modules/@playwright/test/cli.js test
+//   (Run Playwright through node directly: npx would spawn a child with this environment before
+//   the NODE_DEBUG guard below can run.)
 //
 // Locally, the client-side Development key is read from FS_DEV_CLIENT_KEY by the test server and
 // put into the page in memory only (scripts/serve-dist.mjs); it is never written to disk.
