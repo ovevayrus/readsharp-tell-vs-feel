@@ -80,35 +80,39 @@ export async function assertDevelopment(env, fetchImpl) {
     throw new SimError('FS_DEV_SERVER_KEY must be a server-side key starting with ser.');
   }
 
-  if (env.FLAGSMITH_API_KEY && env.DEV_ENV_ID) {
-    const expectedId = Number(env.DEV_ENV_ID);
-    if (!Number.isFinite(expectedId)) {
-      throw new SimError('DEV_ENV_ID must be numeric.');
-    }
+  const expectedId = Number(env.DEV_ENV_ID);
+  if (env.DEV_ENV_ID === undefined || String(env.DEV_ENV_ID).trim() === '' || !Number.isInteger(expectedId)) {
+    throw new SimError('DEV_ENV_ID is required and must be numeric.');
+  }
 
-    let document;
-    try {
-      const response = await fetchImpl(environmentDocumentUrl, {
-        method: 'GET',
-        headers: { 'X-Environment-Key': environmentKey },
-        redirect: 'error',
-        signal: AbortSignal.timeout(10000),
-      });
-      if (response.ok) {
-        document = await response.json();
-      }
-    } catch {
-      throw new SimError('Could not verify the Development environment ID.');
+  let document;
+  try {
+    const response = await fetchImpl(environmentDocumentUrl, {
+      method: 'GET',
+      headers: { 'X-Environment-Key': environmentKey },
+      redirect: 'error',
+      signal: AbortSignal.timeout(10000),
+    });
+    if (response.ok) {
+      document = await response.json();
     }
-    if (!document || typeof document.id !== 'number') {
-      throw new SimError('Could not verify the Development environment ID.');
-    }
-    if (document.id !== expectedId) {
-      throw new SimError('FS_DEV_SERVER_KEY does not match DEV_ENV_ID.');
-    }
+  } catch {
+    throw new SimError('Could not verify the Development environment ID.');
+  }
+  if (!document || typeof document.id !== 'number') {
+    throw new SimError('Could not verify the Development environment ID.');
+  }
+  if (document.id !== expectedId) {
+    throw new SimError('FS_DEV_SERVER_KEY does not match DEV_ENV_ID.');
   }
 
   return environmentKey;
+}
+
+/** Exit code for a finished run: 1 when nothing was queued or any error was counted. */
+export function exitCodeFor(summary) {
+  const exposures = Object.values(summary.arms).reduce((total, arm) => total + arm.exposures, 0);
+  return exposures === 0 || summary.errors > 0 ? 1 : 0;
 }
 
 export async function runSim(options, { env, fetchImpl, createClient }) {
@@ -205,6 +209,7 @@ export async function runSim(options, { env, fetchImpl, createClient }) {
   return {
     flag, n, seed, pControl, pVariant, pShare,
     evaluation: 'local',
+    counts: 'queued by the SDK',
     arms: Object.fromEntries(arms),
     errors,
     startedAt,

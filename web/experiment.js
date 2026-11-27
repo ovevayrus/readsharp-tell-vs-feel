@@ -26,6 +26,8 @@ export const FLAGS_TIMEOUT_MS = 1500;
 export const LINK_FLUSH_MS = 800;
 
 const EVENT_NAMES = new Set(Object.values(EVENTS));
+/** What result() resolves to for a result the visitor left before the flags arrived. */
+const ABANDONED = Object.freeze({ arm: ARMS.TELL, exposed: false, abandoned: true });
 
 /** A promise-returning in-memory AsyncStorage for the SDK (its default adapter uses localStorage). */
 export function createMemoryStorage() {
@@ -56,7 +58,9 @@ export function resetPageForTests() {
 
 /**
  * @param {object} options
- * @param {object} options.sdk the Flagsmith JS SDK instance (default export of @flagsmith/flagsmith)
+ * @param {object | (() => Promise<object>)} options.sdk the Flagsmith JS SDK instance (default export
+ *   of @flagsmith/flagsmith), or a loader resolving to it. With a loader the SDK module is evaluated
+ *   only at an eligible Start, so nothing (not even the SDK object) exists before then.
  * @param {string} options.environmentID the client-side environment key
  * @param {() => boolean} options.isEligible eligibility check, called at Start
  * @param {() => string} [options.randomUUID]
@@ -66,14 +70,16 @@ export function resetPageForTests() {
  */
 export function createExperiment({ sdk, environmentID, isEligible, randomUUID, win = globalThis, transient = true }) {
 	const uuid = randomUUID ?? (() => win.crypto.randomUUID());
+	let client = null; // the SDK instance, once loaded at Start
 	let ready = null; // Promise<boolean>: flags loaded for our identity
 	let identifier = null;
-	let decision = null; // Promise of the fixed { arm, exposed } for this page view
+	let fixed = null; // the { arm, exposed } fixed for this page view
+	let pending = null; // a result() still deciding
 	let exposed = false;
 
 	const wait = (ms) => new Promise((resolve) => win.setTimeout(() => resolve(false), ms));
 	const flush = (ms) => {
-		const flushed = Promise.resolve().then(() => sdk.flushEvents()).then(() => true, () => false);
+		const flushed = Promise.resolve().then(() => client.flushEvents()).then(() => true, () => false);
 		return ms === undefined ? flushed : Promise.race([flushed, wait(ms)]);
 	};
 
@@ -92,8 +98,12 @@ export function createExperiment({ sdk, environmentID, isEligible, randomUUID, w
 		// identify() before init() only sets the context, so init's single request is the
 		// transient identity call (identities/?identifier=…&transient=true).
 		ready = Promise.resolve()
-			.then(() => sdk.identify(identifier, undefined, transient === true))
-			.then(() => sdk.init({ environmentID, enableEvents: true, cacheFlags: false, AsyncStorage: createMemoryStorage() }))
+			.then(() => (typeof sdk === 'function' ? sdk() : sdk))
+			.then((instance) => {
+				client = instance;
+				return client.identify(identifier, undefined, transient === true);
+			})
+			.then(() => client.init({ environmentID, enableEvents: true, cacheFlags: false, AsyncStorage: createMemoryStorage() }))
 			.then(() => true, () => false);
 		win.addEventListener?.('pagehide', () => {
 			if (exposed) flush();
@@ -101,32 +111,42 @@ export function createExperiment({ sdk, environmentID, isEligible, randomUUID, w
 		return true;
 	}
 
-	/**
-	 * Readingtest "result": fixes the arm for the rest of the page view. The first call records
-	 * the exposure (via getExperimentFlag) and calls onArm(arm) at that moment, before awaiting
-	 * the flush; later calls return the same arm and record nothing.
-	 */
-	function result(onArm) {
-		if (decision) {
-			return decision.then((fixed) => {
-				onArm?.(fixed.arm);
-				return fixed;
-			});
+	async function decide(onArm, isActive) {
+		const loaded = ready ? await Promise.race([ready, wait(FLAGS_TIMEOUT_MS)]) : false;
+		// The visitor left this result while flags were on their way (e.g. "Try another
+		// passage"): record nothing and fix nothing; the next shown result decides.
+		if (!isActive()) return ABANDONED;
+		let arm = ARMS.TELL;
+		if (loaded) {
+			const flag = client.getExperimentFlag(FLAG);
+			arm = flag?.value === ARMS.FEEL ? ARMS.FEEL : ARMS.TELL;
+			exposed = flag?.enabled !== false && flag?.experiment?.inExperiment === true;
 		}
-		decision = (async () => {
-			const loaded = ready ? await Promise.race([ready, wait(FLAGS_TIMEOUT_MS)]) : false;
-			let arm = ARMS.TELL;
-			if (loaded) {
-				const flag = sdk.getExperimentFlag(FLAG);
-				arm = flag?.value === ARMS.FEEL ? ARMS.FEEL : ARMS.TELL;
-				exposed = flag?.enabled !== false && flag?.experiment?.inExperiment === true;
-			}
-			const fixed = Object.freeze({ arm, exposed });
-			onArm?.(arm);
-			if (exposed) await flush();
+		fixed = Object.freeze({ arm, exposed });
+		onArm?.(arm);
+		if (exposed) await flush();
+		return fixed;
+	}
+
+	/**
+	 * Readingtest "result": fixes the arm for the rest of the page view. The first shown result
+	 * records the exposure (via getExperimentFlag) and calls onArm(arm) at that moment, before
+	 * awaiting the flush; later results get the same arm and record nothing. isActive() is checked
+	 * right before the flag is read: a result the visitor already left is abandoned (no exposure,
+	 * no onArm, arm not fixed), and a result() called meanwhile waits for it, then decides itself.
+	 */
+	async function result(onArm, { isActive = () => true } = {}) {
+		while (pending) await pending;
+		if (fixed) {
+			if (isActive()) onArm?.(fixed.arm);
 			return fixed;
-		})();
-		return decision;
+		}
+		pending = decide(onArm, isActive);
+		try {
+			return await pending;
+		} finally {
+			pending = null;
+		}
 	}
 
 	/**
@@ -137,7 +157,7 @@ export function createExperiment({ sdk, environmentID, isEligible, randomUUID, w
 	async function track(name, { link = false } = {}) {
 		if (!EVENT_NAMES.has(name)) throw new Error(`Unknown experiment event: ${name}`);
 		if (!exposed) return false;
-		sdk.trackEvent(name);
+		client.trackEvent(name);
 		await flush(link ? LINK_FLUSH_MS : undefined);
 		return true;
 	}

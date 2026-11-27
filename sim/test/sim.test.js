@@ -1,10 +1,11 @@
 import assert from 'node:assert/strict';
 import test from 'node:test';
-import { assertDevelopment, createRng, decideConversions, parseArgs, runSim } from '../lib.mjs';
+import { assertDevelopment, createRng, exitCodeFor, decideConversions, parseArgs, runSim } from '../lib.mjs';
 
 const serverKey = ['ser', 'sim-test-fixture'].join('.');
 const apiKey = ['admin', 'sim-test-fixture'].join('.');
-const developmentEnv = { SIM_ENV: 'development', FS_DEV_SERVER_KEY: serverKey };
+const developmentEnv = { SIM_ENV: 'development', FS_DEV_SERVER_KEY: serverKey, DEV_ENV_ID: '42' };
+const verifiedFetch = async () => ({ ok: true, json: async () => ({ id: 42 }) });
 
 function rejectsWithoutSecrets(promise, message, secrets = [serverKey, apiKey]) {
   return assert.rejects(promise, (error) => {
@@ -152,20 +153,37 @@ test('the edge API check uses the server key and requires the numeric Developmen
   }
 });
 
-test('the edge API check is optional unless both variables are set and sanitizes fetch failures', async () => {
+test('the edge API check is mandatory: missing or non-numeric DEV_ENV_ID is refused without a request', async () => {
   let requests = 0;
-  const fetchImpl = async () => {
-    requests++;
-    throw new Error(`${serverKey} ${apiKey}`);
-  };
-
-  await assertDevelopment({ ...developmentEnv, FLAGSMITH_API_KEY: apiKey }, fetchImpl);
-  await assertDevelopment({ ...developmentEnv, DEV_ENV_ID: '42' }, fetchImpl);
+  const fetchImpl = async () => { requests++; return { ok: true, json: async () => ({ id: 42 }) }; };
+  for (const DEV_ENV_ID of [undefined, '', 'abc']) {
+    await rejectsWithoutSecrets(
+      assertDevelopment({ ...developmentEnv, FLAGSMITH_API_KEY: apiKey, DEV_ENV_ID }, fetchImpl), /DEV_ENV_ID/);
+  }
   assert.equal(requests, 0);
-  await rejectsWithoutSecrets(assertDevelopment({
-    ...developmentEnv, FLAGSMITH_API_KEY: apiKey, DEV_ENV_ID: '42',
-  }, fetchImpl), /environment|verify/i);
-  assert.equal(requests, 1);
+});
+
+test('the edge API check no longer depends on FLAGSMITH_API_KEY and refuses on fetch failures or non-2xx', async () => {
+  assert.equal(await assertDevelopment(developmentEnv, verifiedFetch), serverKey);
+  const failures = [
+    async () => { throw new Error(`${serverKey} ${apiKey}`); },
+    async () => ({ ok: false, json: async () => ({ id: 42 }) }),
+    async () => ({ ok: true, json: async () => { throw new Error(serverKey); } }),
+  ];
+  for (const fetchImpl of failures) {
+    await rejectsWithoutSecrets(assertDevelopment(developmentEnv, fetchImpl), /verify/i);
+  }
+});
+
+test('a mismatched environment ID is refused', async () => {
+  await rejectsWithoutSecrets(
+    assertDevelopment(developmentEnv, async () => ({ ok: true, json: async () => ({ id: 7 }) })), /does not match/);
+});
+
+test('exit code is 1 for zero exposures or errors, 0 otherwise', () => {
+  assert.equal(exitCodeFor({ arms: { a: { exposures: 2 } }, errors: 0 }), 0);
+  assert.equal(exitCodeFor({ arms: {}, errors: 0 }), 1);
+  assert.equal(exitCodeFor({ arms: { a: { exposures: 2 } }, errors: 1 }), 1);
 });
 
 test('runSim applies each arm probability and closes once after flushing its events', async () => {
@@ -175,7 +193,7 @@ test('runSim applies each arm probability and closes once after flushing its eve
 
   for (const [arm, conversions] of [['control', 3], ['treatment', 0]]) {
     const { lookups, events, flushes, closes, configurations, createClient } = fakeClient(arm);
-    const summary = await runSim(options, { env: developmentEnv, createClient });
+    const summary = await runSim(options, { env: developmentEnv, fetchImpl: verifiedFetch, createClient });
 
     assert.equal(configurations.length, 1);
     assert.ok(configurations[0].environmentKey === serverKey, 'Expected the validated server key');
@@ -193,6 +211,7 @@ test('runSim applies each arm probability and closes once after flushing its eve
     assert.equal(summary.pVariant, 0);
     assert.equal(summary.pShare, 1);
     assert.equal(summary.evaluation, 'local');
+    assert.equal(summary.counts, 'queued by the SDK');
     assert.ok(Date.parse(summary.startedAt) <= Date.parse(summary.finishedAt));
     assert.deepEqual(flushes, [3 + conversions]);
     assert.deepEqual(closes, [1]);
@@ -211,8 +230,8 @@ test('changing concurrency leaves each identity’s events unchanged', async () 
   ]);
   const serial = fakeClient('treatment');
   const concurrent = fakeClient('treatment');
-  await runSim({ ...options, concurrency: 1 }, { env: developmentEnv, createClient: serial.createClient });
-  await runSim({ ...options, concurrency: 7 }, { env: developmentEnv, createClient: concurrent.createClient });
+  await runSim({ ...options, concurrency: 1 }, { env: developmentEnv, fetchImpl: verifiedFetch, createClient: serial.createClient });
+  await runSim({ ...options, concurrency: 7 }, { env: developmentEnv, fetchImpl: verifiedFetch, createClient: concurrent.createClient });
   assert.deepEqual(serial.events.sort(), concurrent.events.sort());
 });
 
@@ -238,6 +257,7 @@ test('unenrolled identities send no conversions and a control can use its own fl
   ]);
   const summary = await runSim(options, {
     env: developmentEnv,
+    fetchImpl: verifiedFetch,
     createClient: () => ({
       getExperimentFlag: () => results.shift(),
       trackEvent: (name, { identifier }) => events.push([name, identifier]),
@@ -259,6 +279,7 @@ test('SDK failures and arm labels cannot expose credentials in the summary', asy
   ]);
   const summary = await runSim(options, {
     env: { ...developmentEnv, FLAGSMITH_API_KEY: apiKey },
+    fetchImpl: verifiedFetch,
     createClient: ({ logger }) => ({
       getExperimentFlag() {
         logger.warn(new Error(serverKey));
@@ -283,7 +304,7 @@ test('large runs flush before the SDK buffer can fill', async () => {
   const options = parseArgs([
     '--flag', 'aa_check', '--n', '501', '--p-variant', '1', '--p-share', '1', '--concurrency', '20',
   ]);
-  const summary = await runSim(options, { env: developmentEnv, createClient });
+  const summary = await runSim(options, { env: developmentEnv, fetchImpl: verifiedFetch, createClient });
 
   assert.deepEqual(summary.arms, { treatment: { exposures: 501, get_readsharp: 501, result_shared: 501 } });
   assert.deepEqual(flushes, [500, 1000, 1002]);

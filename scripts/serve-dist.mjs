@@ -54,6 +54,15 @@ export function candidates(urlPath) {
 /** Build with READSHARP_FLAGSMITH_ENV_KEY set to this placeholder; the server swaps in the real key. */
 export const PLACEHOLDER_KEY = 'LOCAL_E2E_PLACEHOLDER';
 
+/** True when every data-flagsmith-env attribute is empty or the placeholder (so no real key is baked in). */
+export function embeddedKeysOk(html) {
+	for (const match of html.matchAll(/data-flagsmith-env\s*=\s*(?:"([^"]*)"|'([^']*)'|([^\s>"']+))/gi)) {
+		const value = match[1] ?? match[2] ?? match[3] ?? '';
+		if (value !== '' && value !== PLACEHOLDER_KEY) return false;
+	}
+	return true;
+}
+
 /** Puts the key into data-flagsmith-env attributes holding the placeholder (or empty), in memory only. */
 export function injectKey(html, key) {
 	if (!key) return html;
@@ -75,7 +84,15 @@ export async function startServer({ dir, port = 4173, key = '' }) {
 			} catch { continue; }
 			let body = await readFile(file);
 			const type = TYPES[extname(file)] ?? 'application/octet-stream';
-			if (type.startsWith('text/html')) body = Buffer.from(injectKey(body.toString('utf8'), key));
+			if (type.startsWith('text/html')) {
+				const html = body.toString('utf8');
+				if (!embeddedKeysOk(html)) {
+					res.writeHead(500, { 'Content-Type': 'text/plain' });
+					res.end('Refusing to serve a page with an embedded Flagsmith key. Rebuild with the placeholder key.');
+					return;
+				}
+				body = Buffer.from(injectKey(html, key));
+			}
 			const headers = headersFor(rules, urlPath);
 			res.writeHead(200, { ...Object.fromEntries(headers), 'Content-Type': type, 'Cache-Control': 'no-store' });
 			res.end(body);

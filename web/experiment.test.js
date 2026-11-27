@@ -332,3 +332,50 @@ test('the memory adapter matches the SDK AsyncStorage contract (promises, option
 });
 
 afterEach(() => resetPageForTests());
+
+test('with a loader, the SDK module is loaded only at an eligible Start', async () => {
+	let loads = 0;
+	const sdk = fakeSdk();
+	const loader = () => { loads++; return Promise.resolve(sdk); };
+	const ineligible = createExperiment({ sdk: loader, environmentID: 'k', isEligible: () => false, win });
+	ineligible.start();
+	await ineligible.result();
+	assert.equal(loads, 0, 'ineligible: never loaded');
+	const exp = createExperiment({ sdk: loader, environmentID: 'k', isEligible: () => true, win });
+	await settle();
+	assert.equal(loads, 0, 'not before Start');
+	exp.start();
+	const fixed = await exp.result();
+	assert.equal(loads, 1);
+	assert.deepEqual({ ...fixed }, { arm: ARMS.FEEL, exposed: true });
+	assert.deepEqual(names(sdk).slice(0, 2), ['identify', 'init']);
+	assert.equal(await exp.track(EVENTS.GET_READSHARP), true);
+});
+
+test('a result the visitor left before the flags arrived records nothing; the next result decides', async () => {
+	const gate = deferred();
+	const { exp, sdk } = setup({ sdk: fakeSdk({ initGate: gate.promise }) });
+	exp.start();
+	let active = true;
+	const rendered = [];
+	const first = exp.result((arm) => rendered.push(['first', arm]), { isActive: () => active });
+	await settle();
+	active = false; // "Try another passage" while flags are pending
+	const second = exp.result((arm) => rendered.push(['second', arm]));
+	gate.resolve();
+	assert.deepEqual({ ...(await first) }, { arm: ARMS.TELL, exposed: false, abandoned: true });
+	assert.deepEqual({ ...(await second) }, { arm: ARMS.FEEL, exposed: true });
+	assert.deepEqual(rendered, [['second', 'feel']], 'only the shown result renders');
+	assert.equal(sdk.calls.filter((c) => c[0] === 'getExperimentFlag').length, 1);
+	assert.equal(sdk.sent.filter((e) => e.event === '$flag_exposure').length, 1);
+});
+
+test('a fixed arm is not re-rendered into a result that is no longer shown', async () => {
+	const { exp } = setup();
+	exp.start();
+	await exp.result();
+	const rendered = [];
+	const again = await exp.result((arm) => rendered.push(arm), { isActive: () => false });
+	assert.equal(again.arm, ARMS.FEEL);
+	assert.deepEqual(rendered, []);
+});

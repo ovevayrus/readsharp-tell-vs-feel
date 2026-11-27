@@ -1,7 +1,8 @@
 #!/usr/bin/env node
 // Asks the Flagsmith edge API which value a flag serves to N fresh identities, the same way the
 // browser SDK does (GET /api/v1/identities/?identifier=…[&transient=true]). Prints one small JSON
-// summary: counts per value, per variant key, and how many identities were inExperiment.
+// summary: counts per value, per variant key and per reason, and how many identities were inExperiment, plus the experiment id and label. Raw flag values are never shown.
+// Production requires --transient (no identity is stored there).
 //
 //   node scripts/probe-identities.mjs --env development --flag speed_test_next_step [--n 40] [--transient]
 //
@@ -21,10 +22,11 @@ export function parseArgs(argv) {
 		else if (arg === '--flag') opts.flag = argv[++i];
 		else if (arg === '--n') opts.n = Number(argv[++i]);
 		else if (arg === '--transient') opts.transient = true;
-		else throw new Error(`Unknown argument: ${arg}`);
+		else throw new Error('Unknown argument. Allowed: --env, --flag, --n, --transient.');
 	}
 	if (!KEY_VARS[opts.env]) throw new Error('--env must be development or production');
-	if (!opts.flag) throw new Error('--flag is required');
+	if (!opts.flag || opts.flag.startsWith('--')) throw new Error('--flag is required');
+	if (opts.env === 'production' && !opts.transient) throw new Error('--env production requires --transient, so no identity is stored.');
 	if (!Number.isInteger(opts.n) || opts.n < 1 || opts.n > 500) throw new Error('--n must be an integer from 1 to 500');
 	return opts;
 }
@@ -39,25 +41,28 @@ export function tally(summary, body, flag) {
 	// The edge API reports experiment membership under metadata.experiment ({ id, in_experiment, name }).
 	const experiment = state?.metadata?.experiment;
 	if (experiment?.in_experiment === true) summary.inExperiment++;
-	if (experiment && !summary.experimentIds.includes(experiment.id)) summary.experimentIds.push(experiment.id);
+	if (experiment) {
+		summary.experimentPresent++;
+		if (!summary.experiments.some((x) => x.id === experiment.id)) summary.experiments.push({ id: experiment.id, label: experiment.name ?? null });
+	}
+	const reason = state?.reason == null ? '(none)' : String(state.reason);
+	summary.reasons[reason] = (summary.reasons[reason] ?? 0) + 1;
 	return summary;
 }
+
+export const newSummary = (opts) => ({ env: opts.env, flag: opts.flag, transient: opts.transient, n: opts.n, http: {}, values: {}, variants: {}, reasons: {}, inExperiment: 0, experimentPresent: 0, experiments: [] });
 
 export async function main(argv = process.argv.slice(2), fetchImpl = fetch) {
 	const opts = parseArgs(argv);
 	const key = process.env[KEY_VARS[opts.env]];
 	if (!key) throw new Error(`${KEY_VARS[opts.env]} is not set`);
-	const summary = { env: opts.env, flag: opts.flag, transient: opts.transient, n: opts.n, http: {}, values: {}, variants: {}, inExperiment: 0, experimentIds: [], sampleFlagShape: null };
+	const summary = newSummary(opts);
 	for (let i = 0; i < opts.n; i++) {
 		const url = `${EDGE}identities/?identifier=${encodeURIComponent(`probe-${randomUUID()}`)}${opts.transient ? '&transient=true' : ''}`;
 		const res = await fetchImpl(url, { headers: { 'X-Environment-Key': key, Accept: 'application/json' } });
 		summary.http[res.status] = (summary.http[res.status] ?? 0) + 1;
 		const body = await res.json().catch(() => null);
 		tally(summary, body, opts.flag);
-		if (!summary.sampleFlagShape) {
-			const state = (body?.flags ?? []).find((f) => f.feature?.name === opts.flag);
-			if (state) summary.sampleFlagShape = Object.fromEntries(Object.entries(state).map(([k, v]) => [k, k === 'feature' ? { name: v?.name } : v]));
-		}
 	}
 	console.log(JSON.stringify(summary));
 	return summary;

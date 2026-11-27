@@ -10,6 +10,9 @@ const EDGE = 'https://edge.api.flagsmith.com';
 const EVENTS = 'https://events.api.flagsmith.com';
 const FLAGSMITH = [EDGE, EVENTS];
 const EXPERIMENT_ID = 958;
+// Chromium on Windows resolves navigator.share before a target is chosen, so the site copies to the
+// clipboard there instead; the native-share cases use a macOS user agent.
+const MAC_UA = 'Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/134.0.0.0 Safari/537.36';
 const WINDOWS_UA = 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/134.0.0.0 Safari/537.36';
 
 type Sent = { event: string; identifier: string | null; value: string | null; metadata: Record<string, unknown> | null; feature_name: string | null };
@@ -39,8 +42,11 @@ function record(context: BrowserContext) {
 }
 
 /** Spies installed before any page script: storage, cookies, IndexedDB, CSP violations, share. */
-async function instrument(context: BrowserContext, { gpc = false, share = 'resolve' as 'resolve' | 'abort' | 'none' } = {}) {
-	await context.addInitScript(({ gpc, share }) => {
+type ShareMode = 'resolve' | 'abort' | 'none';
+type ClipboardMode = 'allow' | 'deny';
+
+async function instrument(context: BrowserContext, { gpc = false, share = 'resolve' as ShareMode, clipboard = 'allow' as ClipboardMode } = {}) {
+	await context.addInitScript(({ gpc, share, clipboard }) => {
 		const w = window as any;
 		w.__touched = [];
 		w.__csp = [];
@@ -68,17 +74,22 @@ async function instrument(context: BrowserContext, { gpc = false, share = 'resol
 		if (share !== 'none') {
 			Object.defineProperty(Navigator.prototype, 'canShare', { value: () => true, configurable: true });
 			Object.defineProperty(Navigator.prototype, 'share', {
-				value: () => (share === 'resolve' ? Promise.resolve() : Promise.reject(new DOMException('Share cancelled', 'AbortError'))),
+				value: () => { w.__shareCalls = (w.__shareCalls ?? 0) + 1; return share === 'resolve' ? Promise.resolve() : Promise.reject(new DOMException('Share cancelled', 'AbortError')); },
 				configurable: true,
 			});
 		}
-	}, { gpc, share });
+		// The clipboard is stubbed so results don't depend on the machine's clipboard permission.
+		Object.defineProperty(Navigator.prototype, 'clipboard', {
+			get: () => ({ writeText: () => (clipboard === 'allow' ? Promise.resolve() : Promise.reject(new DOMException('Denied', 'NotAllowedError'))) }),
+			configurable: true,
+		});
+	}, { gpc, share, clipboard });
 }
 
-async function newSession(browser: Browser, options: BrowserContextOptions & { gpc?: boolean; share?: 'resolve' | 'abort' | 'none' } = {}) {
-	const { gpc, share, ...contextOptions } = options;
+async function newSession(browser: Browser, options: BrowserContextOptions & { gpc?: boolean; share?: ShareMode; clipboard?: ClipboardMode } = {}) {
+	const { gpc, share, clipboard, ...contextOptions } = options;
 	const context = await browser.newContext(contextOptions);
-	await instrument(context, { gpc, share });
+	await instrument(context, { gpc, share, clipboard });
 	const rec = record(context);
 	const page = await context.newPage();
 	const consoleCsp: string[] = [];
@@ -88,7 +99,7 @@ async function newSession(browser: Browser, options: BrowserContextOptions & { g
 }
 
 /** Plays one passage through to its result. Returns the time the result was submitted. */
-async function readPassage(page: Page, rec?: ReturnType<typeof record>) {
+async function readPassage(page: Page, rec?: ReturnType<typeof record>, before?: { exposuresBeforeSubmit?: number }) {
 	// Fast-forwarding the fake clock would also fire the SDK's 3 s request timeout on a flush still
 	// in flight, and the SDK would then resend that batch. Let in-flight requests finish first.
 	if (rec) await waitFor(() => rec.flagsmith().every((r) => r.status !== undefined), 8000);
@@ -100,6 +111,7 @@ async function readPassage(page: Page, rec?: ReturnType<typeof record>) {
 	const count = await fields.count();
 	for (let i = 0; i < count; i++) await fields.nth(i).locator('input').first().check();
 	const submittedAt = Date.now();
+	if (rec && before) before.exposuresBeforeSubmit = rec.sent().filter((e) => e.event === '$flag_exposure').length;
 	await page.locator('[data-test-questions] button[type="submit"]').click();
 	await expect(page.locator('[data-test-result]')).toBeVisible();
 	return submittedAt;
@@ -144,7 +156,10 @@ test('(a) ineligible visitors send nothing: GPC, ?optout, Europe/Berlin, UTC', a
 	];
 	for (const [label, options, query] of cases) {
 		const s = await newSession(browser, options);
-		await toResult(s.page, query);
+		await s.page.goto(`${PAGE}${query}`);
+		expect(await s.page.evaluate(() => typeof (window as any).flagsmith), `${label}: SDK not loaded before Start`).toBe('undefined');
+		await readPassage(s.page);
+		expect(await s.page.evaluate(() => typeof (window as any).flagsmith), `${label}: SDK still not loaded after the result`).toBe('undefined');
 		await s.page.locator('[data-get-readsharp]').click();
 		await s.page.waitForTimeout(2000);
 		expect(s.rec.flagsmith(), `${label}: no Flagsmith requests at all`).toEqual([]);
@@ -155,12 +170,15 @@ test('(a) ineligible visitors send nothing: GPC, ?optout, Europe/Berlin, UTC', a
 });
 
 test('(a)(b)(c)(d)(e)(i) an eligible view: nothing before Start, one exposure, events after it only', async ({ browser }) => {
-	const s = await newSession(browser, { share: 'resolve' });
+	const s = await newSession(browser, { share: 'resolve', userAgent: MAC_UA });
 	await s.page.goto(PAGE);
 	await s.page.waitForTimeout(1500);
 	expect(s.rec.flagsmith(), 'zero Flagsmith requests before Start').toEqual([]);
+	expect(await s.page.evaluate(() => typeof (window as any).flagsmith), 'SDK not loaded before Start').toBe('undefined');
 	const pageOrigin = new URL(s.page.url()).origin;
-	const submittedAt = await readPassage(s.page);
+	const before: { exposuresBeforeSubmit?: number } = {};
+	const submittedAt = await readPassage(s.page, s.rec, before);
+	expect(before.exposuresBeforeSubmit, 'no $flag_exposure before the questions are submitted').toBe(0);
 	tally.sessions++; tally.reachedResult++;
 	expect(await waitFor(() => s.rec.sent().some((e) => e.event === '$flag_exposure')), 'exposure sent').toBe(true);
 	const exposures = s.rec.sent().filter((e) => e.event === '$flag_exposure');
@@ -200,7 +218,7 @@ test('(a)(b)(c)(d)(e)(i) an eligible view: nothing before Start, one exposure, e
 });
 
 test('(e) a cancelled share sends nothing', async ({ browser }) => {
-	const s = await newSession(browser, { share: 'abort' });
+	const s = await newSession(browser, { share: 'abort', userAgent: MAC_UA });
 	await toResult(s.page);
 	tally.sessions++; tally.reachedResult++;
 	expect(await waitFor(() => s.rec.sent().some((e) => e.event === '$flag_exposure'))).toBe(true);
@@ -208,9 +226,28 @@ test('(e) a cancelled share sends nothing', async ({ browser }) => {
 	tally.arms[await armOf(s.page)]++;
 	await s.page.locator('[data-share-result]').click();
 	await s.page.waitForTimeout(2500);
+	expect(await s.page.evaluate(() => (window as any).__shareCalls), 'native share was used').toBe(1);
 	expect(s.rec.sent().filter((e) => e.event === 'result_shared')).toEqual([]);
 	await expectClean(s.page, s.rec, s.consoleCsp, s.context);
 	await s.context.close();
+});
+
+test('(e) on Windows the share button copies instead; only a successful copy counts', async ({ browser }) => {
+	for (const clipboard of ['allow', 'deny'] as const) {
+		const s = await newSession(browser, { share: 'resolve', userAgent: WINDOWS_UA, clipboard });
+		await toResult(s.page);
+		expect(await waitFor(() => s.rec.sent().some((e) => e.event === '$flag_exposure'))).toBe(true);
+		await s.page.locator('[data-share-result]').click();
+		if (clipboard === 'allow') {
+			expect(await waitFor(() => s.rec.sent().some((e) => e.event === 'result_shared')), 'a successful copy counts').toBe(true);
+		} else {
+			await s.page.waitForTimeout(2500);
+			expect(s.rec.sent().filter((e) => e.event === 'result_shared'), 'a failed copy counts nothing').toEqual([]);
+		}
+		expect(await s.page.evaluate(() => (window as any).__shareCalls ?? 0), 'Windows never calls navigator.share').toBe(0);
+		await expectClean(s.page, s.rec, s.consoleCsp, s.context);
+		await s.context.close();
+	}
 });
 
 test('(f) the installer event is delivered even though the click navigates away', async ({ browser }) => {
@@ -224,6 +261,10 @@ test('(f) the installer event is delivered even though the click navigates away'
 	tally.exposed++;
 	tally.arms[await armOf(s.page)]++;
 	const before = s.page.url();
+	let navigationStartedAt = 0;
+	s.page.on('framenavigated', (frame) => {
+		if (frame === s.page.mainFrame() && frame.url() !== before && !navigationStartedAt) navigationStartedAt = Date.now();
+	});
 	await s.page.locator('[data-get-readsharp]').click();
 	tally.clickedGetReadSharp++;
 	const link = s.page.locator('[data-installer-link]');
@@ -231,6 +272,8 @@ test('(f) the installer event is delivered even though the click navigates away'
 	await Promise.all([s.page.waitForURL((u) => u.href !== before, { timeout: 5000 }), link.click()]);
 	const delivered = s.rec.flagsmith().find((r) => r.events.some((e) => e.event === 'installer_download'));
 	expect(delivered, 'installer_download was sent before leaving').toBeTruthy();
+	expect(navigationStartedAt, 'the page navigated to a different URL').toBeGreaterThan(0);
+	expect(delivered!.at, 'the installer_download POST was sent before the navigation started').toBeLessThanOrEqual(navigationStartedAt);
 	expect(await waitFor(() => delivered!.status !== undefined)).toBe(true);
 	expect(delivered!.status).toBeGreaterThanOrEqual(200);
 	expect(delivered!.status!).toBeLessThan(300);

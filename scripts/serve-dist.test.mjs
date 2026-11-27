@@ -1,6 +1,6 @@
 import assert from 'node:assert/strict';
 import { test } from 'node:test';
-import { PLACEHOLDER_KEY, candidates, headersFor, injectKey, matches, parseHeaders } from './serve-dist.mjs';
+import { PLACEHOLDER_KEY, candidates, embeddedKeysOk, headersFor, injectKey, matches, parseHeaders } from './serve-dist.mjs';
 
 const HEADERS = `/*
   Content-Security-Policy: default-src 'none'; connect-src https://edge.api.flagsmith.com
@@ -37,4 +37,13 @@ test('the key is injected only into empty data-flagsmith-env attributes, and san
 	assert.equal(injectKey('<div data-flagsmith-env=""></div>', 'a"><script>'), '<div data-flagsmith-env="ascript"></div>');
 	assert.equal(injectKey('<div data-flagsmith-env=""></div>', ''), '<div data-flagsmith-env=""></div>');
 	assert.equal(injectKey(`<div data-flagsmith-env="${PLACEHOLDER_KEY}"></div>`, 'realKey1'), '<div data-flagsmith-env="realKey1"></div>');
+});
+
+test('embeddedKeysOk accepts only empty or placeholder data-flagsmith-env values', () => {
+	assert.ok(embeddedKeysOk('<html><body>no attribute</body></html>'));
+	assert.ok(embeddedKeysOk('<div data-flagsmith-env=""></div>'));
+	assert.ok(embeddedKeysOk(`<div data-flagsmith-env="${PLACEHOLDER_KEY}"></div><p data-flagsmith-env=""></p>`));
+	assert.ok(!embeddedKeysOk('<div data-flagsmith-env="abc123"></div>'));
+	assert.ok(!embeddedKeysOk(`<div data-flagsmith-env="${PLACEHOLDER_KEY}"></div><i data-flagsmith-env='real'></i>`));
+	assert.ok(!embeddedKeysOk('<div data-flagsmith-env=real></div>'));
 });
