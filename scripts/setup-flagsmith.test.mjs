@@ -1,6 +1,6 @@
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
-import { parseArgs, plan, featureId, findDrift, assertNoChildProcessDebug, FLAGS, METRICS, EXPERIMENTS } from './setup-flagsmith.mjs';
+import { parseArgs, plan, featureId, findDrift, assertNoChildProcessDebug, childProcessDebugEnabled, FLAGS, METRICS, EXPERIMENTS } from './setup-flagsmith.mjs';
 
 const types = (actions) => actions.map((a) => a.type);
 
@@ -168,4 +168,26 @@ test('setup refuses to run when NODE_DEBUG mentions child_process', () => {
 	assert.throws(() => assertNoChildProcessDebug({ NODE_DEBUG: 'http,child_process' }), /NODE_DEBUG/);
 	assert.doesNotThrow(() => assertNoChildProcessDebug({ NODE_DEBUG: 'http' }));
 	assert.doesNotThrow(() => assertNoChildProcessDebug({}));
+});
+
+test('findDrift: a variation with the right key but the wrong value is drift', () => {
+	const state = goodState();
+	state.features[0].variants[0].value = 'tell';
+	assert.match(findDrift(spec, state).join('\n'), /speed_test_next_step drift: variation feel does not have the value feel/);
+});
+
+test('findDrift: an experiment whose hypothesis differs from the spec is drift', () => {
+	const state = goodState();
+	const detail = Object.values(state.experimentDetails)[0];
+	detail.hypothesis = 'something else';
+	assert.match(findDrift(spec, state).join('\n'), /drift: its hypothesis differs/);
+});
+
+test('NODE_DEBUG wildcards that enable child_process are refused, others are not', () => {
+	for (const value of ['child_process', 'child*', '*', 'net,child_process', 'CHILD_PROCESS', 'http child*']) {
+		assert.equal(childProcessDebugEnabled(value), true, value);
+		assert.throws(() => assertNoChildProcessDebug({ NODE_DEBUG: value }, false), /NODE_DEBUG/);
+	}
+	for (const value of ['', 'http', 'child_proc', 'net,tls']) assert.equal(childProcessDebugEnabled(value), false, value);
+	assert.throws(() => assertNoChildProcessDebug({}, true), /NODE_DEBUG/, 'the resolved debuglog state also counts');
 });

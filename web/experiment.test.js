@@ -379,3 +379,17 @@ test('a fixed arm is not re-rendered into a result that is no longer shown', asy
 	assert.equal(again.arm, ARMS.FEEL);
 	assert.deepEqual(rendered, []);
 });
+
+test('a later result renders the fixed arm without waiting for the first exposure flush', async () => {
+	const { exp, sdk } = setup();
+	exp.start();
+	const gate = sdk.holdFlush();
+	const first = exp.result();
+	await settle(30);
+	const rendered = [];
+	await exp.result((arm) => rendered.push(arm));
+	assert.deepEqual(rendered, ['feel'], 'second result rendered while the first flush is still pending');
+	gate.resolve();
+	await first;
+	assert.equal(sdk.calls.filter((c) => c[0] === 'getExperimentFlag').length, 1);
+});

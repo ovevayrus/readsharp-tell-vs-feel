@@ -7,9 +7,9 @@ export function scheduleWords(tokens, wpm, tokenDelay) {
 export function outcomeLine(practiceWpm, measuredWpm) {
   const pace = practiceWpm.toLocaleString('en-US');
   const improvement = measuredWpm > 0 ? Math.round((practiceWpm / measuredWpm - 1) * 100) : 0;
-  return improvement > 0
-    ? `That was ${pace} words per minute, ${improvement}% faster than you just read.`
-    : `That was ${pace} words per minute, at your pace.`;
+  if (improvement > 0) return `That was ${pace} words per minute, ${improvement}% faster than you just read.`;
+  if (improvement < 0) return `That was ${pace} words per minute, ${-improvement}% slower than you just read.`;
+  return `That was ${pace} words per minute, at your pace.`;
 }
 
 /** Mount a one-word-at-a-time reader using the supplied reading engine. */
@@ -131,6 +131,9 @@ export function createFeelReader({
   function play() {
     mayAutoplay = false;
     wantsPlayback = true;
+    // A visitor who presses Play can see the reader, whatever share of it is in view: the 60%
+    // rule is for autoplay. Scrolling it away later still pauses it.
+    inView = true;
     syncPlayback();
   }
 

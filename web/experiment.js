@@ -136,7 +136,9 @@ export function createExperiment({ sdk, environmentID, isEligible, randomUUID, w
 	 * no onArm, arm not fixed), and a result() called meanwhile waits for it, then decides itself.
 	 */
 	async function result(onArm, { isActive = () => true } = {}) {
-		while (pending) await pending;
+		// Once the arm is fixed, later results render at once, without waiting for the
+		// exposure's flush to finish.
+		while (pending && !fixed) await pending;
 		if (fixed) {
 			if (isActive()) onArm?.(fixed.arm);
 			return fixed;

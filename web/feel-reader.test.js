@@ -148,7 +148,7 @@ test('word timings equal tokenDelay at the given wpm', (t) => {
 test('outcomeLine reports faster, equal, slower, and missing measured speeds', () => {
   assert.equal(outcomeLine(450, 300), 'That was 450 words per minute, 50% faster than you just read.');
   assert.equal(outcomeLine(300, 300), 'That was 300 words per minute, at your pace.');
-  assert.equal(outcomeLine(200, 300), 'That was 200 words per minute, at your pace.');
+  assert.equal(outcomeLine(200, 224), 'That was 200 words per minute, 11% slower than you just read.');
   assert.equal(outcomeLine(200), 'That was 200 words per minute, at your pace.');
   assert.equal(outcomeLine(1250, 900), 'That was 1,250 words per minute, 39% faster than you just read.');
 });
@@ -355,4 +355,14 @@ test('destroy clears the timer, disconnects the observer, and removes visibility
   page.setHidden(false);
   page.clock.advanceBy(1200);
   assert.equal(finishCalls, 0);
+});
+
+test('pressing Play works even when less than 60% of the reader is in view', (t) => {
+  const page = browser(t, { reducedMotion: true });
+  const reader = page.create();
+  page.setIntersection(0.49);
+  page.toggle.click();
+  assert.equal(reader.state, 'playing');
+  page.setIntersection(0);
+  assert.equal(reader.state, 'paused', 'scrolling it away still pauses it');
 });
