@@ -2,7 +2,7 @@ import assert from 'node:assert/strict';
 import { afterEach, beforeEach, test } from 'node:test';
 import {
 	ARMS, EVENTS, FLAG, FLAGS_TIMEOUT_MS, LINK_FLUSH_MS,
-	createExperiment, createMemoryStorage, resetPageForTests,
+	createExperiment, createMemoryStorage, keepaliveFetch, resetPageForTests,
 } from './experiment.js';
 
 const deferred = () => {
@@ -129,7 +129,7 @@ test('Start identifies a transient in-memory UUID, then calls init once with the
 	assert.deepEqual(names(sdk), ['identify', 'init']);
 	assert.deepEqual(sdk.calls[0], ['identify', '11111111-2222-4333-8444-555555555555', undefined, true]);
 	const config = sdk.calls[1][1];
-	assert.deepEqual(Object.keys(config).sort(), ['AsyncStorage', 'cacheFlags', 'enableEvents', 'environmentID']);
+	assert.deepEqual(Object.keys(config).sort(), ['AsyncStorage', 'cacheFlags', 'enableEvents', 'environmentID', 'fetch']);
 	assert.equal(config.environmentID, 'env-client-key');
 	assert.equal(config.enableEvents, true);
 	assert.equal(config.cacheFlags, false);
@@ -392,4 +392,21 @@ test('a later result renders the fixed arm without waiting for the first exposur
 	gate.resolve();
 	await first;
 	assert.equal(sdk.calls.filter((c) => c[0] === 'getExperimentFlag').length, 1);
+});
+
+test('the SDK fetch adds keepalive, and retries once without it if the browser refuses', async () => {
+	const calls = [];
+	const ok = { fetch: (url, init) => { calls.push(init); return Promise.resolve('response'); } };
+	assert.equal(await keepaliveFetch(ok)('https://events.example/v1/events', { method: 'POST', body: '{}' }), 'response');
+	assert.deepEqual(calls, [{ method: 'POST', body: '{}', keepalive: true }]);
+
+	const seen = [];
+	const refusing = { fetch: (url, init) => { seen.push(init.keepalive === true); return init.keepalive ? Promise.reject(new TypeError('keepalive not supported')) : Promise.resolve('plain'); } };
+	assert.equal(await keepaliveFetch(refusing)('https://events.example/v1/events', { method: 'POST' }), 'plain');
+	assert.deepEqual(seen, [true, false]);
+
+	const controller = new AbortController();
+	controller.abort();
+	const aborted = { fetch: () => Promise.reject(new DOMException('aborted', 'AbortError')) };
+	await assert.rejects(keepaliveFetch(aborted)('https://x', { signal: controller.signal }), /aborted/, 'an aborted request is not retried');
 });

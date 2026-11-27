@@ -47,6 +47,22 @@ export function createMemoryStorage() {
 	};
 }
 
+/**
+ * The SDK's fetch, with keepalive: an event sent just before the visitor follows a link (the
+ * installer) would otherwise be cancelled by the navigation when the events API is slow. A browser
+ * that refuses keepalive for a request gets the same request once more without it.
+ */
+export function keepaliveFetch(win) {
+	return async (url, init = {}) => {
+		try {
+			return await win.fetch(url, { ...init, keepalive: true });
+		} catch (error) {
+			if (init.signal?.aborted) throw error;
+			return win.fetch(url, init);
+		}
+	};
+}
+
 // A second SDK init on the page would reset the SDK's module-level storage adapter, so the
 // guard is module-wide, not per experiment object.
 let pageInitialised = false;
@@ -103,7 +119,7 @@ export function createExperiment({ sdk, environmentID, isEligible, randomUUID, w
 				client = instance;
 				return client.identify(identifier, undefined, transient === true);
 			})
-			.then(() => client.init({ environmentID, enableEvents: true, cacheFlags: false, AsyncStorage: createMemoryStorage() }))
+			.then(() => client.init({ environmentID, enableEvents: true, cacheFlags: false, AsyncStorage: createMemoryStorage(), fetch: keepaliveFetch(win) }))
 			.then(() => true, () => false);
 		win.addEventListener?.('pagehide', () => {
 			if (exposed) flush();

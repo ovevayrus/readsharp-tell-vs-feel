@@ -136,6 +136,9 @@ async function readPassage(page: Page, given?: ReturnType<typeof record>, before
 	// in flight, and the SDK would then resend that batch. Let in-flight requests finish first.
 	if (rec) await waitFor(() => rec.settled(), 8000);
 	await page.locator('[data-test-start]').click();
+	// For an eligible visitor, Start makes the SDK request the flags for its identity; give that
+	// request time to be issued (none comes for ineligible visitors) so it can settle before submit.
+	if (rec) await waitFor(() => rec.flagsmith().some((r) => r.url.startsWith(`${EDGE}/api/v1/identities/`)), 3000);
 	await page.clock.fastForward(60_000); // ~300 words in 60 s: about 300 wpm, past the 10 s minimum
 	await page.locator('[data-test-done]').click();
 	const fields = page.locator('[data-test-fields] fieldset');
@@ -184,7 +187,19 @@ async function expectClean(page: Page, rec: ReturnType<typeof record>, consoleCs
 	for (const e of rec.sent()) expect(await waitFor(() => rec.delivered(e), 12000), `${e.event} delivered with a 2xx`).toBe(true);
 }
 
-const tally = { sessions: 0, reachedResult: 0, exposed: 0, clickedGetReadSharp: 0, shared: 0, arms: { tell: 0, feel: 0 } as Record<string, number> };
+// Eligible sessions sent to Flagsmith Development, by arm, for the proof gate (G2 item 6).
+const tally = { sessions: 0, reachedResult: 0, exposed: 0, clickedGetReadSharp: 0, shared: 0, arms: { tell: 0, feel: 0 } as Record<string, number>, clicksByArm: { tell: 0, feel: 0 } as Record<string, number> };
+/** Counts a session whose exposure was sent; returns its arm. */
+async function countExposure(page: Page) {
+	tally.sessions++; tally.reachedResult++; tally.exposed++;
+	const arm = await armOf(page);
+	tally.arms[arm]++;
+	return arm;
+}
+async function countClick(page: Page) {
+	tally.clickedGetReadSharp++;
+	tally.clicksByArm[await armOf(page)]++;
+}
 
 test.describe.configure({ mode: 'serial' });
 
@@ -241,7 +256,7 @@ test('(a)(b)(c)(d)(e)(i) an eligible view: nothing before Start, one exposure, e
 	// (e) Get ReadSharp, then a successful share.
 	await s.page.locator('[data-get-readsharp]').click();
 	await expect(s.page.locator('[data-get-panel]')).toBeVisible();
-	tally.clickedGetReadSharp++;
+	await countClick(s.page);
 	await s.page.locator('[data-share-result]').click();
 	tally.shared++;
 	expect(await waitFor(() => s.rec.sent().some((e) => e.event === 'result_shared'))).toBe(true);
@@ -313,7 +328,7 @@ test('(f) the installer event is delivered even though the click navigates away'
 		if (request.isNavigationRequest() && request.frame() === s.page.mainFrame() && request.url() !== before && !navigationStartedAt) navigationStartedAt = Date.now();
 	});
 	await s.page.locator('[data-get-readsharp]').click();
-	tally.clickedGetReadSharp++;
+	await countClick(s.page);
 	const link = s.page.locator('[data-installer-link]');
 	await expect(link).toBeVisible();
 	await Promise.all([s.page.waitForURL((u) => u.href !== before, { timeout: 5000 }), link.click()]);
@@ -339,7 +354,7 @@ test('(g) "Try another passage" keeps the identifier and the arm, with no second
 	await readPassage(s.page, s.rec);
 	expect(await armOf(s.page)).toBe(arm);
 	await s.page.locator('[data-get-readsharp]').click();
-	tally.clickedGetReadSharp++;
+	await countClick(s.page);
 	expect(await waitFor(() => s.rec.sent().some((e) => e.event === 'get_readsharp'))).toBe(true);
 	expect(s.rec.sent().filter((e) => e.event === '$flag_exposure')).toHaveLength(1);
 	expect(s.rec.sent().every((e) => e.identifier === first.identifier)).toBe(true);
@@ -361,11 +376,9 @@ test('(h) both arms appear across 20 sessions, each with exactly one exposure', 
 		tally.arms[arm]++;
 		const exposure = s.rec.sent().find((e) => e.event === '$flag_exposure')!;
 		expect(arm).toBe(exposure.value === 'feel' ? 'feel' : 'tell');
-		if (i % 2 === 0) {
-			await s.page.locator('[data-get-readsharp]').click();
-			tally.clickedGetReadSharp++;
-			expect(await waitFor(() => s.rec.sent().some((e) => e.event === 'get_readsharp'))).toBe(true);
-		}
+		await s.page.locator('[data-get-readsharp]').click();
+		await countClick(s.page);
+		expect(await waitFor(() => s.rec.sent().some((e) => e.event === 'get_readsharp'))).toBe(true);
 		expect(s.rec.sent().filter((e) => e.event === '$flag_exposure')).toHaveLength(1);
 		await expectClean(s.page, s.rec, s.consoleCsp, s.context);
 		await s.context.close();
@@ -380,7 +393,7 @@ test('axe: no violations in the result card and the Feel reader', async ({ brows
 		const s = await newSession(browser);
 		await toResult(s.page);
 		expect(await waitFor(() => s.rec.sent().some((e) => e.event === '$flag_exposure'))).toBe(true);
-		const arm = await armOf(s.page);
+		const arm = await countExposure(s.page);
 		if (!found[arm]) {
 			found[arm] = true;
 			const results = await new AxeBuilder({ page: s.page }).include('[data-test-result]').analyze();

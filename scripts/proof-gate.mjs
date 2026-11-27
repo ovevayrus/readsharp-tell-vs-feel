@@ -1,0 +1,108 @@
+#!/usr/bin/env node
+// The Development proof gate (plan A2, US-12): do the browser end-to-end sessions show up in the
+// Flagsmith experiment results, per arm?
+//
+//   node scripts/proof-gate.mjs snapshot docs/proof/before.json      (before running e2e)
+//   node scripts/proof-gate.mjs check docs/proof/before.json test-results/e2e-counts.json
+//
+// A snapshot refreshes the results of the Development experiment on speed_test_next_step and
+// saves, per arm, the identities exposed and the get_readsharp conversions. `check` takes a new
+// snapshot and passes only if, in EACH arm, exposures grew by at least the e2e sessions counted in
+// that arm and get_readsharp by at least the e2e clicks in that arm. It uses the Flagsmith CLI's
+// credentials; the environment key is looked up in memory and never printed.
+import { execFileSync } from 'node:child_process';
+import { readFileSync, writeFileSync, mkdirSync } from 'node:fs';
+import { dirname } from 'node:path';
+import { pathToFileURL } from 'node:url';
+import { assertNoChildProcessDebug } from './setup-flagsmith.mjs';
+
+export const PROJECT = '56718';
+export const FLAG = 'speed_test_next_step';
+export const PRIMARY_EVENT = 'get_readsharp';
+/** The e2e tally names the control arm "tell"; Flagsmith results call it "control". */
+export const RESULT_ARM = { tell: 'control', feel: 'feel' };
+
+/** Per-arm exposures and primary conversions from a results payload. Pure. */
+export function summarize(payload, primaryMetricId) {
+	const exposures = {};
+	for (const point of payload?.exposures_timeseries?.points ?? []) {
+		for (const [arm, n] of Object.entries(point.new_identities ?? {})) exposures[arm] = (exposures[arm] ?? 0) + Number(n);
+	}
+	const metric = (payload?.metrics ?? []).find((m) => m.metric_id === primaryMetricId);
+	const conversions = Object.fromEntries(Object.entries(metric?.variants ?? {}).map(([arm, v]) => [arm, Number(v.sum ?? 0)]));
+	return { exposures, conversions };
+}
+
+/** Compares two snapshots with the e2e tally, arm by arm. Pure. */
+export function compare(before, after, counts) {
+	const rows = [];
+	for (const [tallyArm, resultArm] of Object.entries(RESULT_ARM)) {
+		const exposed = (after.exposures[resultArm] ?? 0) - (before.exposures[resultArm] ?? 0);
+		const converted = (after.conversions[resultArm] ?? 0) - (before.conversions[resultArm] ?? 0);
+		const needExposed = counts.arms?.[tallyArm] ?? 0;
+		const needConverted = counts.clicksByArm?.[tallyArm] ?? 0;
+		rows.push({
+			arm: resultArm,
+			exposuresGrew: exposed, exposuresNeeded: needExposed,
+			conversionsGrew: converted, conversionsNeeded: needConverted,
+			pass: needExposed > 0 && exposed >= needExposed && converted >= needConverted,
+		});
+	}
+	return { pass: rows.every((r) => r.pass), rows };
+}
+
+function cli(args) {
+	return execFileSync('flagsmith', args, { encoding: 'utf8', stdio: ['ignore', 'pipe', 'pipe'], maxBuffer: 32e6 });
+}
+
+function snapshot() {
+	const environments = JSON.parse(cli(['environment', 'list', '--project', PROJECT, '--json']));
+	const development = (Array.isArray(environments) ? environments : environments.results ?? []).find((e) => e.name === 'Development');
+	if (!development?.api_key) throw new Error('Could not find the Development environment');
+	const base = `api/v1/environments/${development.api_key}`;
+	const list = (value) => (Array.isArray(value) ? value : value?.results ?? []);
+	const experiment = list(JSON.parse(cli(['api', `${base}/experiments/`])))
+		.find((x) => (x.feature?.name ?? '') === FLAG && !['ended', 'completed'].includes(String(x.status)));
+	if (!experiment) throw new Error(`No active Development experiment on ${FLAG}`);
+	const metric = list(JSON.parse(cli(['api', `${base}/experiment-metrics/`]))).find((m) => m.name === PRIMARY_EVENT);
+	try { cli(['api', `${base}/experiments/${experiment.id}/results/refresh/`, '-X', 'POST']); } catch { /* at most once per 5 minutes; read the latest results */ }
+	const results = JSON.parse(cli(['api', `${base}/experiments/${experiment.id}/results/`])).results;
+	return { experiment: experiment.id, asOf: results?.as_of ?? null, ...summarize(results?.payload, metric?.id) };
+}
+
+function save(file, data) {
+	mkdirSync(dirname(file), { recursive: true });
+	writeFileSync(file, `${JSON.stringify(data, null, 2)}\n`);
+}
+
+export function main(argv = process.argv.slice(2)) {
+	assertNoChildProcessDebug();
+	const [command, first, second] = argv;
+	if (command === 'snapshot' && first) {
+		const snap = snapshot();
+		save(first, snap);
+		console.log(JSON.stringify(snap));
+		return 0;
+	}
+	if (command === 'check' && first && second) {
+		const before = JSON.parse(readFileSync(first, 'utf8'));
+		const counts = JSON.parse(readFileSync(second, 'utf8'));
+		const after = snapshot();
+		const verdict = { before: before.asOf, after: after.asOf, ...compare(before, after, counts) };
+		save(`${first.replace(/\.json$/, '')}.after.json`, { ...after, verdict });
+		console.log(JSON.stringify(verdict, null, 2));
+		console.log(verdict.pass ? 'PROOF GATE: PASS' : 'PROOF GATE: FAIL (refresh again in 5 minutes; after 30 minutes without a pass, use the G2 item 3 fallback)');
+		return verdict.pass ? 0 : 1;
+	}
+	console.error('Usage: node scripts/proof-gate.mjs snapshot <before.json> | check <before.json> <e2e-counts.json>');
+	return 2;
+}
+
+if (import.meta.url === pathToFileURL(process.argv[1] ?? '').href) {
+	try {
+		process.exitCode = main();
+	} catch (error) {
+		console.error(error.message);
+		process.exitCode = 1;
+	}
+}
