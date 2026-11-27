@@ -3,6 +3,13 @@
 //
 //   node scripts/setup-flagsmith.mjs --env development [--create-experiment <flag>] [--start] [--dry-run]
 //   node scripts/setup-flagsmith.mjs --env production [--dry-run]
+//   node scripts/setup-flagsmith.mjs --env production --create-experiment speed_test_next_step --start --registered <commit> [--dry-run]
+//
+// The last form is the launch (gate G4). It refuses unless <commit> is on origin/main, its
+// EXPERIMENT.md says REGISTERED and no later commit there changed EXPERIMENT.md, so the
+// pre-registration is pushed before the Production experiment exists. It always creates and
+// starts back to back: an experiment that is created but not started already serves the split,
+// without recording exposures.
 //
 // It drives the Flagsmith CLI v2 (`flagsmith feature …` and `flagsmith api …`), so the CLI's own
 // credentials are used (FLAGSMITH_API_KEY or `flagsmith login`) and this script never handles
@@ -15,8 +22,8 @@
 //   • in the chosen environment, each flag that belongs there is enabled with the control value
 //     and 0% on every variation;
 //   • the metrics exist in that environment;
-//   • with --create-experiment (Development only), that flag has one experiment with the
-//     planned hypothesis, metrics, 100% rollout and an even split; --start starts it.
+//   • with --create-experiment, that flag has one experiment with the planned hypothesis,
+//     metrics, 100% rollout and an even split; --start starts it.
 // A second run creates nothing. Features are project-wide in Flagsmith, so creating a flag also
 // gives other environments a feature state; those stay disabled until this script runs for them.
 import { execFileSync } from 'node:child_process';
@@ -75,7 +82,7 @@ export const featureId = (experiment) => experiment.feature?.id ?? experiment.fe
 const ACTIVE = (experiment) => !['ended', 'completed', 'cancelled', 'archived'].includes(String(experiment.status ?? '').toLowerCase());
 
 export function parseArgs(argv) {
-	const opts = { env: null, createExperiment: null, start: false, dryRun: false, project: null };
+	const opts = { env: null, createExperiment: null, start: false, dryRun: false, project: null, registered: null };
 	for (let i = 0; i < argv.length; i++) {
 		const arg = argv[i];
 		const value = () => {
@@ -88,15 +95,43 @@ export function parseArgs(argv) {
 		else if (arg === '--start') opts.start = true;
 		else if (arg === '--dry-run') opts.dryRun = true;
 		else if (arg === '--project') opts.project = value();
-		else throw new Error('Unknown argument. Allowed: --env, --create-experiment, --start, --dry-run, --project.');
+		else if (arg === '--registered') opts.registered = value();
+		else throw new Error('Unknown argument. Allowed: --env, --create-experiment, --start, --dry-run, --project, --registered.');
 	}
 	if (!ENV_NAMES[opts.env]) throw new Error('--env must be development or production');
 	if (opts.createExperiment !== null) {
-		if (opts.env !== 'development') throw new Error('--create-experiment is allowed only with --env development');
 		if (!EXPERIMENTS[opts.createExperiment]) throw new Error(`No experiment is defined for that flag. Allowed flags: ${Object.keys(EXPERIMENTS).join(', ')}.`);
+		if (opts.env === 'production') {
+			if (!FLAGS.find((f) => f.name === opts.createExperiment).environments.includes('production')) throw new Error('That flag has no Production experiment.');
+			if (!opts.start) throw new Error('In Production, --create-experiment needs --start: an unstarted experiment serves the split without recording exposures.');
+			if (opts.registered === null) throw new Error('In Production, --create-experiment needs --registered <commit>: the pushed commit that set EXPERIMENT.md to REGISTERED.');
+		}
 	}
+	if (opts.registered !== null && !(opts.env === 'production' && opts.createExperiment !== null)) throw new Error('--registered is only for creating the Production experiment.');
+	if (opts.registered !== null && !/^[0-9a-f]{7,40}$/.test(opts.registered)) throw new Error('--registered must be a commit id (7 to 40 hex characters).');
 	if (opts.start && opts.createExperiment === null) throw new Error('--start needs --create-experiment');
 	return opts;
+}
+
+const gitText = (args) => execFileSync('git', args, { encoding: 'utf8', stdio: ['ignore', 'pipe', 'pipe'] });
+
+/**
+ * Refuses unless the registered commit is on origin/main, its EXPERIMENT.md says REGISTERED, and
+ * no later commit on origin/main changed EXPERIMENT.md. `git` is injectable for tests.
+ */
+export function assertRegistered(commit, git = gitText) {
+	git(['fetch', '--quiet', 'origin', 'main']);
+	try {
+		git(['merge-base', '--is-ancestor', commit, 'origin/main']);
+	} catch {
+		throw new Error('The registered commit is not on origin/main: push the REGISTERED EXPERIMENT.md first.');
+	}
+	if (!/^\*\*Status: REGISTERED\*\*/m.test(git(['show', `${commit}:EXPERIMENT.md`]))) {
+		throw new Error('EXPERIMENT.md at the registered commit is not marked REGISTERED.');
+	}
+	if (git(['log', '--format=%h', `${commit}..origin/main`, '--', 'EXPERIMENT.md']).trim()) {
+		throw new Error('EXPERIMENT.md changed on origin/main after the registered commit.');
+	}
 }
 
 /** Works out what a run must do, from what already exists. Pure, so idempotency is testable. */
@@ -374,6 +409,7 @@ function summarize(state) {
 export async function main(argv = process.argv.slice(2)) {
 	assertNoChildProcessDebug();
 	const opts = parseArgs(argv);
+	if (opts.registered !== null) assertRegistered(opts.registered);
 	const client = makeClient(opts.project);
 	const log = (line) => console.log(client.redact(line));
 	let state = readState(client, opts.env);

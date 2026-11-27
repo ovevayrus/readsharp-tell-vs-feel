@@ -1,6 +1,6 @@
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
-import { parseArgs, plan, featureId, findDrift, assertNoChildProcessDebug, childProcessDebugEnabled, FLAGS, METRICS, EXPERIMENTS } from './setup-flagsmith.mjs';
+import { parseArgs, plan, assertRegistered, featureId, findDrift, assertNoChildProcessDebug, childProcessDebugEnabled, FLAGS, METRICS, EXPERIMENTS } from './setup-flagsmith.mjs';
 
 const types = (actions) => actions.map((a) => a.type);
 
@@ -12,8 +12,49 @@ test('parseArgs accepts development and production, and rejects anything else', 
 	assert.throws(() => parseArgs(['--env', 'development', '--bogus']), /Unknown argument/);
 });
 
-test('--create-experiment is refused outside Development', () => {
-	assert.throws(() => parseArgs(['--env', 'production', '--create-experiment', 'speed_test_next_step']), /only with --env development/);
+test('a Production experiment needs --start and --registered, and only for speed_test_next_step', () => {
+	const prod = ['--env', 'production', '--create-experiment', 'speed_test_next_step'];
+	assert.throws(() => parseArgs(prod), /needs --start/);
+	assert.throws(() => parseArgs([...prod, '--start']), /needs --registered/);
+	assert.throws(() => parseArgs(['--env', 'production', '--create-experiment', 'aa_check', '--start', '--registered', 'cd7ede6']), /no Production experiment/);
+	assert.throws(() => parseArgs([...prod, '--start', '--registered', 'not-a-sha']), /must be a commit id/);
+	assert.throws(() => parseArgs(['--env', 'production', '--registered', 'cd7ede6']), /only for creating the Production experiment/);
+	assert.throws(() => parseArgs(['--env', 'development', '--create-experiment', 'aa_check', '--registered', 'cd7ede6']), /only for creating the Production experiment/);
+	const opts = parseArgs([...prod, '--start', '--registered', 'cd7ede6']);
+	assert.deepEqual([opts.env, opts.createExperiment, opts.start, opts.registered], ['production', 'speed_test_next_step', true, 'cd7ede6']);
+});
+
+test('assertRegistered: the commit must be on origin/main, REGISTERED, and the latest EXPERIMENT.md there', () => {
+	const fakeGit = ({ ancestor = true, text = '# x\n\n**Status: REGISTERED** (Fri)\n', later = '' } = {}) => {
+		const calls = [];
+		const git = (args) => {
+			calls.push(args[0]);
+			if (args[0] === 'merge-base' && !ancestor) throw new Error('exit 1');
+			if (args[0] === 'show') return text;
+			if (args[0] === 'log') return later;
+			return '';
+		};
+		return { git, calls };
+	};
+	const ok = fakeGit();
+	assertRegistered('cd7ede6', ok.git);
+	assert.deepEqual(ok.calls, ['fetch', 'merge-base', 'show', 'log']);
+	assert.throws(() => assertRegistered('cd7ede6', fakeGit({ ancestor: false }).git), /not on origin\/main/);
+	assert.throws(() => assertRegistered('cd7ede6', fakeGit({ text: '**Status: DRAFT**\n' }).git), /not marked REGISTERED/);
+	assert.throws(() => assertRegistered('cd7ede6', fakeGit({ later: 'abc1234\n' }).git), /changed on origin\/main after/);
+});
+
+test('Production launch plan: create then start, nothing else', () => {
+	const prodReady = {
+		features: [{ id: 1, name: 'speed_test_next_step', variants: [{ id: 11, key: 'feel' }] }],
+		featureStates: { speed_test_next_step: { enabled: true, value: 'tell', allocations: [{ percentage_allocation: 0 }] } },
+		metrics: METRICS.map((m, i) => ({ id: 100 + i, name: m.name })),
+		experiments: [],
+	};
+	assert.deepEqual(types(plan({ env: 'production', createExperiment: 'speed_test_next_step', start: true }, prodReady)), ['create-experiment', 'start-experiment']);
+});
+
+test('--create-experiment checks the flag name in Development', () => {
 	assert.equal(parseArgs(['--env', 'development', '--create-experiment', 'aa_check']).createExperiment, 'aa_check');
 	assert.throws(() => parseArgs(['--env', 'development', '--create-experiment', 'nope']), /No experiment is defined for that flag\. Allowed flags: speed_test_next_step, aa_check/);
 	assert.throws(() => parseArgs(['--env', 'development', '--create-experiment', 'SECRET-xyz']), (e) => !e.message.includes('SECRET-xyz'));
