@@ -110,6 +110,9 @@ async function readPassage(page: Page, rec?: ReturnType<typeof record>, before?:
 	await expect(fields.first()).toBeVisible();
 	const count = await fields.count();
 	for (let i = 0; i < count; i++) await fields.nth(i).locator('input').first().check();
+	// A real visitor reads for at least 10 s, long enough for the flags requested at Start to
+	// arrive; the fake clock compresses that to a second or two, so wait for that response here.
+	if (rec) await waitFor(() => rec.flagsmith().every((r) => r.status !== undefined), 8000);
 	const submittedAt = Date.now();
 	if (rec && before) before.exposuresBeforeSubmit = rec.sent().filter((e) => e.event === '$flag_exposure').length;
 	await page.locator('[data-test-questions] button[type="submit"]').click();
