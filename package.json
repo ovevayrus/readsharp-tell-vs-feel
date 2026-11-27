@@ -14,5 +14,8 @@
   "dependencies": {
     "@flagsmith/flagsmith": "12.6.0",
     "@flagsmith/nodejs": "^9.5.0"
+  },
+  "devDependencies": {
+    "jsdom": "29.0.1"
   }
 }
