@@ -51,9 +51,14 @@ export function candidates(urlPath) {
 	return extname(clean) ? [clean] : [`${clean}.html`, `${clean}/index.html`, clean];
 }
 
-/** Puts the key into data-flagsmith-env="" attributes, in memory only. */
+/** Build with READSHARP_FLAGSMITH_ENV_KEY set to this placeholder; the server swaps in the real key. */
+export const PLACEHOLDER_KEY = 'LOCAL_E2E_PLACEHOLDER';
+
+/** Puts the key into data-flagsmith-env attributes holding the placeholder (or empty), in memory only. */
 export function injectKey(html, key) {
-	return key ? html.replaceAll('data-flagsmith-env=""', `data-flagsmith-env="${key.replace(/[^A-Za-z0-9_.-]/g, '')}"`) : html;
+	if (!key) return html;
+	const safe = `data-flagsmith-env="${key.replace(/[^A-Za-z0-9_.-]/g, '')}"`;
+	return html.replaceAll(`data-flagsmith-env="${PLACEHOLDER_KEY}"`, safe).replaceAll('data-flagsmith-env=""', safe);
 }
 
 export async function startServer({ dir, port = 4173, key = '' }) {

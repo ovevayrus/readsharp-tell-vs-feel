@@ -1,0 +1,308 @@
+import { test, expect, type Browser, type BrowserContext, type Page, type BrowserContextOptions } from '@playwright/test';
+import AxeBuilder from '@axe-core/playwright';
+import { writeFileSync, mkdirSync } from 'node:fs';
+
+// Privacy and wiring checks (a)–(i) for the Tell vs Feel experiment. Real requests go to the
+// Flagsmith DEVELOPMENT environment, where experiment "Tell vs Feel" (id 958) is running.
+
+const PAGE = '/reading-speed-test';
+const EDGE = 'https://edge.api.flagsmith.com';
+const EVENTS = 'https://events.api.flagsmith.com';
+const FLAGSMITH = [EDGE, EVENTS];
+const EXPERIMENT_ID = 958;
+const WINDOWS_UA = 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/134.0.0.0 Safari/537.36';
+
+type Sent = { event: string; identifier: string | null; value: string | null; metadata: Record<string, unknown> | null; feature_name: string | null };
+type Req = { url: string; origin: string; method: string; at: number; status?: number; events: Sent[] };
+
+/** Records every request of a context, with parsed Flagsmith event batches and response codes. */
+function record(context: BrowserContext) {
+	const reqs: Req[] = [];
+	const byRequest = new Map<object, Req>();
+	context.on('request', (request) => {
+		const url = request.url();
+		let events: Sent[] = [];
+		if (url.startsWith(EVENTS) && request.method() === 'POST') {
+			try { events = JSON.parse(request.postData() ?? '{}').events ?? []; } catch { events = []; }
+		}
+		const entry = { url, origin: new URL(url).origin, method: request.method(), at: Date.now(), events };
+		reqs.push(entry);
+		byRequest.set(request, entry);
+	});
+	context.on('response', (response) => {
+		const entry = byRequest.get(response.request());
+		if (entry) entry.status = response.status();
+	});
+	const flagsmith = () => reqs.filter((r) => FLAGSMITH.includes(r.origin));
+	const sent = () => flagsmith().flatMap((r) => r.events.map((e) => ({ ...e, at: r.at })));
+	return { reqs, flagsmith, sent };
+}
+
+/** Spies installed before any page script: storage, cookies, IndexedDB, CSP violations, share. */
+async function instrument(context: BrowserContext, { gpc = false, share = 'resolve' as 'resolve' | 'abort' | 'none' } = {}) {
+	await context.addInitScript(({ gpc, share }) => {
+		const w = window as any;
+		w.__touched = [];
+		w.__csp = [];
+		const note = (what: string) => w.__touched.push(what);
+		for (const name of ['getItem', 'setItem', 'removeItem', 'clear', 'key'] as const) {
+			const original = Storage.prototype[name];
+			Storage.prototype[name] = function (this: Storage, ...args: any[]) {
+				note(`Storage.${name}`);
+				return (original as any).apply(this, args);
+			} as any;
+		}
+		const cookie = Object.getOwnPropertyDescriptor(Document.prototype, 'cookie')!;
+		Object.defineProperty(Document.prototype, 'cookie', {
+			get() { note('cookie.get'); return cookie.get!.call(this); },
+			set(v) { note('cookie.set'); cookie.set!.call(this, v); },
+			configurable: true,
+		});
+		const idb = window.indexedDB;
+		for (const name of ['open', 'deleteDatabase'] as const) {
+			const original = idb[name].bind(idb);
+			(idb as any)[name] = (...args: any[]) => { note(`indexedDB.${name}`); return (original as any)(...args); };
+		}
+		document.addEventListener('securitypolicyviolation', (e) => w.__csp.push(`${e.violatedDirective} ${e.blockedURI}`));
+		if (gpc) Object.defineProperty(Navigator.prototype, 'globalPrivacyControl', { get: () => true, configurable: true });
+		if (share !== 'none') {
+			Object.defineProperty(Navigator.prototype, 'canShare', { value: () => true, configurable: true });
+			Object.defineProperty(Navigator.prototype, 'share', {
+				value: () => (share === 'resolve' ? Promise.resolve() : Promise.reject(new DOMException('Share cancelled', 'AbortError'))),
+				configurable: true,
+			});
+		}
+	}, { gpc, share });
+}
+
+async function newSession(browser: Browser, options: BrowserContextOptions & { gpc?: boolean; share?: 'resolve' | 'abort' | 'none' } = {}) {
+	const { gpc, share, ...contextOptions } = options;
+	const context = await browser.newContext(contextOptions);
+	await instrument(context, { gpc, share });
+	const rec = record(context);
+	const page = await context.newPage();
+	const consoleCsp: string[] = [];
+	page.on('console', (m) => { if (/Content Security Policy/i.test(m.text())) consoleCsp.push(m.text()); });
+	await page.clock.install();
+	return { context, page, rec, consoleCsp };
+}
+
+/** Plays one passage through to its result. Returns the time the result was submitted. */
+async function readPassage(page: Page, rec?: ReturnType<typeof record>) {
+	// Fast-forwarding the fake clock would also fire the SDK's 3 s request timeout on a flush still
+	// in flight, and the SDK would then resend that batch. Let in-flight requests finish first.
+	if (rec) await waitFor(() => rec.flagsmith().every((r) => r.status !== undefined), 8000);
+	await page.locator('[data-test-start]').click();
+	await page.clock.fastForward(60_000); // ~300 words in 60 s: about 300 wpm, past the 10 s minimum
+	await page.locator('[data-test-done]').click();
+	const fields = page.locator('[data-test-fields] fieldset');
+	await expect(fields.first()).toBeVisible();
+	const count = await fields.count();
+	for (let i = 0; i < count; i++) await fields.nth(i).locator('input').first().check();
+	const submittedAt = Date.now();
+	await page.locator('[data-test-questions] button[type="submit"]').click();
+	await expect(page.locator('[data-test-result]')).toBeVisible();
+	return submittedAt;
+}
+
+async function toResult(page: Page, query = '', rec?: ReturnType<typeof record>) {
+	await page.goto(`${PAGE}${query}`);
+	return readPassage(page, rec);
+}
+
+const armOf = async (page: Page) => ((await page.locator('[data-feel-reader]').isVisible()) ? 'feel' : 'tell');
+
+async function waitFor(predicate: () => boolean, ms = 4000) {
+	const end = Date.now() + ms;
+	while (!predicate() && Date.now() < end) await new Promise((r) => setTimeout(r, 50));
+	return predicate();
+}
+
+async function expectClean(page: Page, rec: ReturnType<typeof record>, consoleCsp: string[], context: BrowserContext) {
+	const touched = await page.evaluate(() => (window as any).__touched);
+	expect(touched, 'no Storage, cookie or IndexedDB access').toEqual([]);
+	expect(await context.cookies(), 'no cookies').toEqual([]);
+	expect(await page.evaluate(() => (window as any).__csp), 'no CSP violations').toEqual([]);
+	expect(consoleCsp, 'no CSP console errors').toEqual([]);
+	expect(await waitFor(() => rec.flagsmith().every((r) => r.status !== undefined), 8000), 'every Flagsmith request answered').toBe(true);
+	for (const r of rec.flagsmith()) {
+		expect(r.status, `${r.method} ${new URL(r.url).pathname} must be 2xx`).toBeGreaterThanOrEqual(200);
+		expect(r.status!).toBeLessThan(300);
+	}
+}
+
+const tally = { sessions: 0, reachedResult: 0, exposed: 0, clickedGetReadSharp: 0, shared: 0, arms: { tell: 0, feel: 0 } as Record<string, number> };
+
+test.describe.configure({ mode: 'serial' });
+
+test('(a) ineligible visitors send nothing: GPC, ?optout, Europe/Berlin, UTC', async ({ browser }) => {
+	const cases: [string, BrowserContextOptions & { gpc?: boolean }, string][] = [
+		['GPC on', { gpc: true }, ''],
+		['?optout', {}, '?optout'],
+		['Europe/Berlin', { timezoneId: 'Europe/Berlin' }, ''],
+		['UTC', { timezoneId: 'UTC' }, ''],
+	];
+	for (const [label, options, query] of cases) {
+		const s = await newSession(browser, options);
+		await toResult(s.page, query);
+		await s.page.locator('[data-get-readsharp]').click();
+		await s.page.waitForTimeout(2000);
+		expect(s.rec.flagsmith(), `${label}: no Flagsmith requests at all`).toEqual([]);
+		expect(await armOf(s.page), `${label}: tell`).toBe('tell');
+		await expectClean(s.page, s.rec, s.consoleCsp, s.context);
+		await s.context.close();
+	}
+});
+
+test('(a)(b)(c)(d)(e)(i) an eligible view: nothing before Start, one exposure, events after it only', async ({ browser }) => {
+	const s = await newSession(browser, { share: 'resolve' });
+	await s.page.goto(PAGE);
+	await s.page.waitForTimeout(1500);
+	expect(s.rec.flagsmith(), 'zero Flagsmith requests before Start').toEqual([]);
+	const pageOrigin = new URL(s.page.url()).origin;
+	const submittedAt = await readPassage(s.page);
+	tally.sessions++; tally.reachedResult++;
+	expect(await waitFor(() => s.rec.sent().some((e) => e.event === '$flag_exposure')), 'exposure sent').toBe(true);
+	const exposures = s.rec.sent().filter((e) => e.event === '$flag_exposure');
+	expect(exposures).toHaveLength(1);
+	const exposure = exposures[0];
+	expect(['feel', 'control']).toContain(exposure.value);
+	expect(exposure.feature_name).toBe('speed_test_next_step');
+	expect(exposure.metadata?.experiment_id).toBe(EXPERIMENT_ID);
+	expect((exposure as any).at - submittedAt, 'exposure sent within 1 s of the render').toBeLessThanOrEqual(1000);
+	const identity = s.rec.flagsmith().find((r) => r.url.startsWith(`${EDGE}/api/v1/identities/`));
+	expect(identity, 'one identities request').toBeTruthy();
+	const params = new URL(identity!.url).searchParams;
+	expect(params.get('transient')).toBe('true');
+	expect(params.get('identifier')).toBe(exposure.identifier);
+	tally.exposed++;
+	tally.arms[await armOf(s.page)]++;
+	expect(await armOf(s.page)).toBe(exposure.value === 'feel' ? 'feel' : 'tell');
+
+	// (e) Get ReadSharp, then a successful share.
+	await s.page.locator('[data-get-readsharp]').click();
+	await expect(s.page.locator('[data-get-panel]')).toBeVisible();
+	tally.clickedGetReadSharp++;
+	await s.page.locator('[data-share-result]').click();
+	tally.shared++;
+	expect(await waitFor(() => s.rec.sent().some((e) => e.event === 'result_shared'))).toBe(true);
+	const names = s.rec.sent().map((e) => e.event);
+	expect(names.filter((n) => n === 'get_readsharp')).toHaveLength(1);
+	expect(names.filter((n) => n === 'result_shared')).toHaveLength(1);
+	expect(names.indexOf('$flag_exposure')).toBeLessThan(names.indexOf('get_readsharp'));
+	expect(s.rec.sent().every((e) => e.identifier === exposure.identifier), 'one identifier for every event').toBe(true);
+	expect(names.every((n) => ['$flag_exposure', 'get_readsharp', 'result_shared', 'feel_read_finished', 'installer_download', 'send_to_pc'].includes(n))).toBe(true);
+	// (b) only the page origin and the two Flagsmith origins.
+	expect([...new Set(s.rec.reqs.map((r) => r.origin))].sort()).toEqual([pageOrigin, ...FLAGSMITH.filter((o) => s.rec.reqs.some((r) => r.origin === o))].sort());
+	expect(s.rec.reqs.every((r) => r.origin === pageOrigin || FLAGSMITH.includes(r.origin))).toBe(true);
+	await expectClean(s.page, s.rec, s.consoleCsp, s.context);
+	await s.context.close();
+});
+
+test('(e) a cancelled share sends nothing', async ({ browser }) => {
+	const s = await newSession(browser, { share: 'abort' });
+	await toResult(s.page);
+	tally.sessions++; tally.reachedResult++;
+	expect(await waitFor(() => s.rec.sent().some((e) => e.event === '$flag_exposure'))).toBe(true);
+	tally.exposed++;
+	tally.arms[await armOf(s.page)]++;
+	await s.page.locator('[data-share-result]').click();
+	await s.page.waitForTimeout(2500);
+	expect(s.rec.sent().filter((e) => e.event === 'result_shared')).toEqual([]);
+	await expectClean(s.page, s.rec, s.consoleCsp, s.context);
+	await s.context.close();
+});
+
+test('(f) the installer event is delivered even though the click navigates away', async ({ browser }) => {
+	const s = await newSession(browser, { userAgent: WINDOWS_UA });
+	// The installer link may point off-site; answer it locally so the test stays offline there.
+	await s.context.route((url) => !url.href.startsWith('http://127.0.0.1') && !FLAGSMITH.includes(url.origin), (route) =>
+		route.fulfill({ status: 200, contentType: 'text/html', body: '<!doctype html><title>download</title>' }));
+	await toResult(s.page);
+	tally.sessions++; tally.reachedResult++;
+	expect(await waitFor(() => s.rec.sent().some((e) => e.event === '$flag_exposure'))).toBe(true);
+	tally.exposed++;
+	tally.arms[await armOf(s.page)]++;
+	const before = s.page.url();
+	await s.page.locator('[data-get-readsharp]').click();
+	tally.clickedGetReadSharp++;
+	const link = s.page.locator('[data-installer-link]');
+	await expect(link).toBeVisible();
+	await Promise.all([s.page.waitForURL((u) => u.href !== before, { timeout: 5000 }), link.click()]);
+	const delivered = s.rec.flagsmith().find((r) => r.events.some((e) => e.event === 'installer_download'));
+	expect(delivered, 'installer_download was sent before leaving').toBeTruthy();
+	expect(await waitFor(() => delivered!.status !== undefined)).toBe(true);
+	expect(delivered!.status).toBeGreaterThanOrEqual(200);
+	expect(delivered!.status!).toBeLessThan(300);
+	await s.context.close();
+});
+
+test('(g) "Try another passage" keeps the identifier and the arm, with no second exposure', async ({ browser }) => {
+	const s = await newSession(browser);
+	await toResult(s.page);
+	tally.sessions++; tally.reachedResult++;
+	expect(await waitFor(() => s.rec.sent().some((e) => e.event === '$flag_exposure'))).toBe(true);
+	tally.exposed++;
+	const arm = await armOf(s.page);
+	tally.arms[arm]++;
+	const first = s.rec.sent().find((e) => e.event === '$flag_exposure')!;
+	await s.page.locator('[data-test-another]').click();
+	await readPassage(s.page, s.rec);
+	expect(await armOf(s.page)).toBe(arm);
+	await s.page.locator('[data-get-readsharp]').click();
+	tally.clickedGetReadSharp++;
+	expect(await waitFor(() => s.rec.sent().some((e) => e.event === 'get_readsharp'))).toBe(true);
+	expect(s.rec.sent().filter((e) => e.event === '$flag_exposure')).toHaveLength(1);
+	expect(s.rec.sent().every((e) => e.identifier === first.identifier)).toBe(true);
+	expect(s.rec.flagsmith().filter((r) => r.url.startsWith(`${EDGE}/api/v1/identities/`))).toHaveLength(1);
+	await expectClean(s.page, s.rec, s.consoleCsp, s.context);
+	await s.context.close();
+});
+
+test('(h) both arms appear across 20 sessions, each with exactly one exposure', async ({ browser }) => {
+	const seen = { tell: 0, feel: 0 } as Record<string, number>;
+	for (let i = 0; i < 20; i++) {
+		const s = await newSession(browser);
+		await toResult(s.page);
+		tally.sessions++; tally.reachedResult++;
+		expect(await waitFor(() => s.rec.sent().some((e) => e.event === '$flag_exposure'))).toBe(true);
+		tally.exposed++;
+		const arm = await armOf(s.page);
+		seen[arm]++;
+		tally.arms[arm]++;
+		const exposure = s.rec.sent().find((e) => e.event === '$flag_exposure')!;
+		expect(arm).toBe(exposure.value === 'feel' ? 'feel' : 'tell');
+		if (i % 2 === 0) {
+			await s.page.locator('[data-get-readsharp]').click();
+			tally.clickedGetReadSharp++;
+			expect(await waitFor(() => s.rec.sent().some((e) => e.event === 'get_readsharp'))).toBe(true);
+		}
+		expect(s.rec.sent().filter((e) => e.event === '$flag_exposure')).toHaveLength(1);
+		await expectClean(s.page, s.rec, s.consoleCsp, s.context);
+		await s.context.close();
+	}
+	expect(seen.tell, 'tell seen').toBeGreaterThan(0);
+	expect(seen.feel, 'feel seen').toBeGreaterThan(0);
+});
+
+test('axe: no violations in the result card and the Feel reader', async ({ browser }) => {
+	const found: Record<string, boolean> = { tell: false, feel: false };
+	for (let i = 0; i < 12 && !(found.tell && found.feel); i++) {
+		const s = await newSession(browser);
+		await toResult(s.page);
+		expect(await waitFor(() => s.rec.sent().some((e) => e.event === '$flag_exposure'))).toBe(true);
+		const arm = await armOf(s.page);
+		if (!found[arm]) {
+			found[arm] = true;
+			const results = await new AxeBuilder({ page: s.page }).include('[data-test-result]').analyze();
+			expect(results.violations.map((v) => `${v.id}: ${v.nodes.map((n) => n.target.join(' ')).join(', ')}`), `${arm} arm`).toEqual([]);
+		}
+		await s.context.close();
+	}
+	expect(found.tell && found.feel, 'both arms checked').toBe(true);
+});
+
+test.afterAll(() => {
+	mkdirSync('test-results', { recursive: true });
+	writeFileSync('test-results/e2e-counts.json', `${JSON.stringify({ ...tally, at: new Date().toISOString() }, null, 2)}\n`);
+});

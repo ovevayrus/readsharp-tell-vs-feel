@@ -1,6 +1,6 @@
 import assert from 'node:assert/strict';
 import { test } from 'node:test';
-import { candidates, headersFor, injectKey, matches, parseHeaders } from './serve-dist.mjs';
+import { PLACEHOLDER_KEY, candidates, headersFor, injectKey, matches, parseHeaders } from './serve-dist.mjs';
 
 const HEADERS = `/*
   Content-Security-Policy: default-src 'none'; connect-src https://edge.api.flagsmith.com
@@ -36,4 +36,5 @@ test('the key is injected only into empty data-flagsmith-env attributes, and san
 	assert.equal(injectKey('<div data-flagsmith-env=""></div>', 'abcDEF123'), '<div data-flagsmith-env="abcDEF123"></div>');
 	assert.equal(injectKey('<div data-flagsmith-env=""></div>', 'a"><script>'), '<div data-flagsmith-env="ascript"></div>');
 	assert.equal(injectKey('<div data-flagsmith-env=""></div>', ''), '<div data-flagsmith-env=""></div>');
+	assert.equal(injectKey(`<div data-flagsmith-env="${PLACEHOLDER_KEY}"></div>`, 'realKey1'), '<div data-flagsmith-env="realKey1"></div>');
 });

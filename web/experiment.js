@@ -61,8 +61,10 @@ export function resetPageForTests() {
  * @param {() => boolean} options.isEligible eligibility check, called at Start
  * @param {() => string} [options.randomUUID]
  * @param {object} [options.win] the window (timers and pagehide)
+ * @param {boolean} [options.transient] true (default): Flagsmith does not store the random identity.
+ *   false is the pre-approved fallback (G2 item 3): the same random per-view ID, stored by Flagsmith.
  */
-export function createExperiment({ sdk, environmentID, isEligible, randomUUID, win = globalThis }) {
+export function createExperiment({ sdk, environmentID, isEligible, randomUUID, win = globalThis, transient = true }) {
 	const uuid = randomUUID ?? (() => win.crypto.randomUUID());
 	let ready = null; // Promise<boolean>: flags loaded for our identity
 	let identifier = null;
@@ -90,7 +92,7 @@ export function createExperiment({ sdk, environmentID, isEligible, randomUUID, w
 		// identify() before init() only sets the context, so init's single request is the
 		// transient identity call (identities/?identifier=…&transient=true).
 		ready = Promise.resolve()
-			.then(() => sdk.identify(identifier, undefined, true))
+			.then(() => sdk.identify(identifier, undefined, transient === true))
 			.then(() => sdk.init({ environmentID, enableEvents: true, cacheFlags: false, AsyncStorage: createMemoryStorage() }))
 			.then(() => true, () => false);
 		win.addEventListener?.('pagehide', () => {

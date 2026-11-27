@@ -136,6 +136,14 @@ test('Start identifies a transient in-memory UUID, then calls init once with the
 	assert.equal(exp.identifier, '11111111-2222-4333-8444-555555555555');
 });
 
+test('the persistent-ID fallback sends the same random ID without transient', async () => {
+	const sdk = fakeSdk();
+	const exp = createExperiment({ sdk, environmentID: 'k', isEligible: () => true, win, transient: false });
+	exp.start();
+	await settle();
+	assert.deepEqual(sdk.calls[0], ['identify', '11111111-2222-4333-8444-555555555555', undefined, false]);
+});
+
 test('only one SDK init per page: a second experiment object cannot init again', async () => {
 	const { exp, sdk } = setup();
 	exp.start();
