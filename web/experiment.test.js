@@ -144,6 +144,15 @@ test('the persistent-ID fallback sends the same random ID without transient', as
 	assert.deepEqual(sdk.calls[0], ['identify', '11111111-2222-4333-8444-555555555555', undefined, false]);
 });
 
+test('an identifier prefix (the ?canary check) goes in front of the random ID', async () => {
+	const sdk = fakeSdk();
+	const exp = createExperiment({ sdk, environmentID: 'k', isEligible: () => true, win, identifierPrefix: 'canary-' });
+	exp.start();
+	await settle();
+	assert.deepEqual(sdk.calls[0], ['identify', 'canary-11111111-2222-4333-8444-555555555555', undefined, true]);
+	assert.equal(exp.identifier, 'canary-11111111-2222-4333-8444-555555555555');
+});
+
 test('only one SDK init per page: a second experiment object cannot init again', async () => {
 	const { exp, sdk } = setup();
 	exp.start();

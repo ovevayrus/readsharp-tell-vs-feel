@@ -83,8 +83,10 @@ export function resetPageForTests() {
  * @param {object} [options.win] the window (timers and pagehide)
  * @param {boolean} [options.transient] true (default): Flagsmith does not store the random identity.
  *   false is the pre-approved fallback (G2 item 3): the same random per-view ID, stored by Flagsmith.
+ * @param {string} [options.identifierPrefix] put in front of the random ID ("canary-" marks the
+ *   owner's one ?canary launch check); the rest of the ID stays random.
  */
-export function createExperiment({ sdk, environmentID, isEligible, randomUUID, win = globalThis, transient = true }) {
+export function createExperiment({ sdk, environmentID, isEligible, randomUUID, win = globalThis, transient = true, identifierPrefix = '' }) {
 	const uuid = randomUUID ?? (() => win.crypto.randomUUID());
 	let client = null; // the SDK instance, once loaded at Start
 	let ready = null; // Promise<boolean>: flags loaded for our identity
@@ -110,7 +112,7 @@ export function createExperiment({ sdk, environmentID, isEligible, randomUUID, w
 		}
 		if (!eligible || !environmentID) return false;
 		pageInitialised = true;
-		identifier = uuid();
+		identifier = identifierPrefix + uuid();
 		// identify() before init() only sets the context, so init's single request is the
 		// transient identity call (identities/?identifier=…&transient=true).
 		ready = Promise.resolve()
