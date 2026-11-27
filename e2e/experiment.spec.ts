@@ -169,6 +169,11 @@ async function waitFor(predicate: () => boolean, ms = 8000) {
 	return predicate();
 }
 
+/** Every distinct event the session sent reached Flagsmith with a 2xx. */
+async function expectDelivered(rec: ReturnType<typeof record>) {
+	for (const e of rec.sent()) expect(await waitFor(() => rec.delivered(e), 12000), `${e.event} delivered with a 2xx`).toBe(true);
+}
+
 async function expectClean(page: Page, rec: ReturnType<typeof record>, consoleCsp: string[], context: BrowserContext) {
 	const touched = await page.evaluate(() => (window as any).__touched);
 	expect(touched, 'no Storage, cookie or IndexedDB access').toEqual([]);
@@ -336,8 +341,8 @@ test('(f) the installer event is delivered even though the click navigates away'
 	expect(delivered, 'installer_download was sent before leaving').toBeTruthy();
 	expect(navigationStartedAt, 'the page navigated to a different URL').toBeGreaterThan(0);
 	expect(delivered!.at, 'the installer_download POST was sent before the navigation started').toBeLessThanOrEqual(navigationStartedAt);
-	const installerEvent = s.rec.sent().find((e) => e.event === 'installer_download')!;
-	expect(await waitFor(() => s.rec.delivered(installerEvent), 12000), 'installer_download reached Flagsmith with a 2xx').toBe(true);
+	expect(s.rec.sent().some((e) => e.event === 'installer_download')).toBe(true);
+	await expectDelivered(s.rec);
 	await s.context.close();
 });
 
@@ -399,6 +404,7 @@ test('axe: no violations in the result card and the Feel reader', async ({ brows
 			const results = await new AxeBuilder({ page: s.page }).include('[data-test-result]').analyze();
 			expect(results.violations.map((v) => `${v.id}: ${v.nodes.map((n) => n.target.join(' ')).join(', ')}`), `${arm} arm`).toEqual([]);
 		}
+		await expectDelivered(s.rec);
 		await s.context.close();
 	}
 	expect(found.tell && found.feel, 'both arms checked').toBe(true);
