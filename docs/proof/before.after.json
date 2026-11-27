@@ -1,0 +1,37 @@
+{
+  "experiment": 958,
+  "takenAt": "2026-11-27T21:59:28.233Z",
+  "refreshed": true,
+  "asOf": "2026-11-27T21:59:26.595506Z",
+  "exposures": {
+    "feel": 567,
+    "control": 585
+  },
+  "conversions": {
+    "feel": 349,
+    "control": 355
+  },
+  "verdict": {
+    "before": "2026-11-27T21:53:35.981866Z",
+    "after": "2026-11-27T21:59:26.595506Z",
+    "pass": true,
+    "rows": [
+      {
+        "arm": "control",
+        "exposuresGrew": 17,
+        "exposuresNeeded": 17,
+        "conversionsGrew": 13,
+        "conversionsNeeded": 13,
+        "pass": true
+      },
+      {
+        "arm": "feel",
+        "exposuresGrew": 12,
+        "exposuresNeeded": 12,
+        "conversionsGrew": 10,
+        "conversionsNeeded": 10,
+        "pass": true
+      }
+    ]
+  }
+}

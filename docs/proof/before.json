@@ -1,0 +1,14 @@
+{
+  "experiment": 958,
+  "takenAt": "2026-11-27T21:53:38.406Z",
+  "refreshed": true,
+  "asOf": "2026-11-27T21:53:35.981866Z",
+  "exposures": {
+    "feel": 555,
+    "control": 568
+  },
+  "conversions": {
+    "feel": 339,
+    "control": 342
+  }
+}

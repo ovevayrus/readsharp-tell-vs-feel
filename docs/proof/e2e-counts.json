@@ -1,0 +1,18 @@
+{
+  "sessions": 29,
+  "reachedResult": 29,
+  "exposed": 29,
+  "clickedGetReadSharp": 23,
+  "shared": 2,
+  "arms": {
+    "tell": 17,
+    "feel": 12
+  },
+  "clicksByArm": {
+    "tell": 13,
+    "feel": 10
+  },
+  "complete": true,
+  "experiment": 958,
+  "at": "2026-11-27T21:55:15.541Z"
+}

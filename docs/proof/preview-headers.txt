@@ -1,0 +1,18 @@
+HTTP/1.1 200 OK
+Date: Fri, 27 Nov 2026 21:53:20 GMT
+Content-Type: text/html; charset=utf-8
+Connection: keep-alive
+Access-Control-Allow-Origin: *
+Cache-Control: no-cache
+ETag: "4617534166c00408fdde6e064ac6ad4c"
+content-security-policy: default-src 'none'; script-src 'self'; style-src 'self'; img-src 'self'; media-src 'self'; base-uri 'none'; form-action 'none'; connect-src https://edge.api.flagsmith.com https://events.api.flagsmith.com; frame-ancestors 'none'
+permissions-policy: camera=(), microphone=(), geolocation=()
+referrer-policy: no-referrer
+x-content-type-options: nosniff
+x-robots-tag: noindex
+Report-To: {"group":"cf-nel","max_age":604800,"endpoints":[{"url":"https://a.nel.cloudflare.com/report/v4?s=rn%2B%2FyF8MsBOqMYUpEqxWI5FdtVfPvoFpiKG7l59dvzTs5lKLEkK3DPKeef704xP3P8eOfJAPwtsi7C0cW1CilQmdTOLd9aEis0QDOdp%2Fr1km%2BUwBvD8hL6AVAs522skFL0VIF7Q9e3NeTLFExgZArWgYAIYVt32zrgWInl6B%2FTc%3D"}]}
+Nel: {"report_to":"cf-nel","success_fraction":0.0,"max_age":604800}
+Server: cloudflare
+CF-RAY: a6145d774fcac44a-EWR
+alt-svc: h3=":443"; ma=86400
+

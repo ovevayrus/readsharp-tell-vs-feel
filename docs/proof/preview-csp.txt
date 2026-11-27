@@ -1,0 +1,3 @@
+Fetched 2026-11-27T21:53:21Z from https://flagsmith-dev-preview.readfast-site.pages.dev/reading-speed-test
+HEADER: content-security-policy: default-src 'none'; script-src 'self'; style-src 'self'; img-src 'self'; media-src 'self'; base-uri 'none'; form-action 'none'; connect-src https://edge.api.flagsmith.com https://events.api.flagsmith.com; frame-ancestors 'none'
+META: <meta http-equiv="Content-Security-Policy" content="default-src 'none'; script-src 'self'; style-src 'self'; img-src 'self'; media-src 'self'; base-uri 'none'; form-action 'none'; connect-src https://edge.api.flagsmith.com https://events.api.flagsmith.com"
