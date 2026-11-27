@@ -1,7 +1,7 @@
 #!/usr/bin/env node
 // Asks the Flagsmith edge API which value a flag serves to N fresh identities, the same way the
 // browser SDK does (GET /api/v1/identities/?identifier=…[&transient=true]). Prints one small JSON
-// summary: counts per value, per variant key and per reason, and how many identities were inExperiment, plus the experiment id and label. Raw flag values are never shown.
+// summary: counts per value, per variant key and per reason, and how many identities were inExperiment, plus the experiment id and label. The raw flag state is not printed.
 // Production requires --transient (no identity is stored there).
 //
 //   node scripts/probe-identities.mjs --env development --flag speed_test_next_step [--n 40] [--transient]

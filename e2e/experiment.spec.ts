@@ -187,9 +187,10 @@ async function expectClean(page: Page, rec: ReturnType<typeof record>, consoleCs
 		expect(r.status, `${r.method} ${new URL(r.url).pathname} must be 2xx`).toBeGreaterThanOrEqual(200);
 		expect(r.status!).toBeLessThan(300);
 	}
-	// ...the flags request was answered, and every distinct event reached Flagsmith with a 2xx.
-	expect(rec.flagsmith().some((r) => r.url.startsWith(`${EDGE}/api/v1/identities/`)) === rec.flagsmith().some((r) => r.url.startsWith(`${EDGE}/api/v1/identities/`) && r.status !== undefined), 'the flags request was answered').toBe(true);
-	for (const e of rec.sent()) expect(await waitFor(() => rec.delivered(e), 12000), `${e.event} delivered with a 2xx`).toBe(true);
+	// ...any flags request was answered, and every distinct event reached Flagsmith with a 2xx.
+	const flagsRequests = rec.flagsmith().filter((r) => r.url.startsWith(`${EDGE}/api/v1/identities/`));
+	expect(flagsRequests.every((r) => r.status !== undefined), 'the flags request was answered').toBe(true);
+	await expectDelivered(rec);
 }
 
 // Eligible sessions sent to Flagsmith Development, by arm, for the proof gate (G2 item 6).

@@ -271,7 +271,7 @@ function readState(client, envName) {
 }
 
 function apply(client, action, state, log) {
-	const { cli, json, api, project } = client;
+	const { cli, json, api, list, project } = client;
 	const key = state.key;
 	switch (action.type) {
 		case 'create-feature':
@@ -282,7 +282,7 @@ function apply(client, action, state, log) {
 			return log(`added variation ${action.variant.key} to ${action.flag.name} at weight 0`);
 		case 'set-feature-state': {
 			const feature = list(json(['feature', 'list', ...project])).find((f) => f.name === action.flag.name);
-			const fs = client.list(api(`api/v1/environments/${key}/featurestates/?feature=${feature.id}`))[0];
+			const fs = list(api(`api/v1/environments/${key}/featurestates/?feature=${feature.id}`))[0];
 			const allocations = (fs.multivariate_feature_state_values ?? []).map((v) => ({
 				multivariate_feature_option: v.multivariate_feature_option,
 				percentage_allocation: 0,
@@ -341,9 +341,6 @@ function apply(client, action, state, log) {
 		}
 		default:
 			throw new Error(`Unknown action ${action.type}`);
-	}
-	function list(value) {
-		return client.list(value);
 	}
 }
 
