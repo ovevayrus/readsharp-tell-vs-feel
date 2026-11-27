@@ -1,8 +1,8 @@
 # Tell vs Feel: pre-registration
 
-**Status: DRAFT**
+**Status: REGISTERED** (Fri 27 Nov 2026, EST)
 
-This file becomes **REGISTERED** in a commit pushed before the Production experiment exists. The time of that commit is the evidence that the hypothesis, metrics and decision rule were fixed before any real data arrived. Until then it may change.
+This file was registered in a commit pushed before the Production experiment existed. The push time on GitHub, earlier than the experiment's creation time in Flagsmith, is the evidence that the hypothesis, metrics and decision rule were fixed before any real data arrived. They no longer change.
 
 - **Product:** [readsharp.app](https://readsharp.app), a paid speed reader for Windows. The experiment runs on its free reading speed test.
 - **Flagsmith flag:** `speed_test_next_step` (multivariate). Control value `tell`. Variation value `feel`, key `feel`, weight 0 outside the experiment.
@@ -32,13 +32,14 @@ ReadSharp has no free trial, so the speed-test result is when a curious visitor 
 | `tell` (control) | Today's result, the practice-pace sentence, and a shared result card. The card has **Get ReadSharp**, which opens an inline panel: the installer link on Windows, Send to my PC elsewhere. It also has **Share my result**. |
 | `feel` (variant) | Everything in `tell`, plus a mini-reader under the sentence and above the card. It plays **the ~50-word continuation of the passage just read** once, at `practicePace(speed, score, total)`, when at least 60% of it is in view. With reduced motion it shows a Play button instead. It ends with "That was N words per minute, X% faster than you just read" (or "at your pace"). |
 | Exposure | `getExperimentFlag('speed_test_next_step')` at the render moment, followed by an immediate flush. No events are sent for views that were never exposed. |
+| Transport | Direct. The browser calls Flagsmith's edge API (`edge.api.flagsmith.com`, flags) and events API (`events.api.flagsmith.com`) itself, with no first-party proxy, so Flagsmith receives the visitor's IP address. Each exposure and event is flushed at once with a keepalive `fetch`; a click that leaves the page waits up to 800 ms for its event. |
 | Primary | `get_readsharp`, Occurrence, increase. A click on the **Get ReadSharp** button, which is identical in both arms. |
 | Guardrail | `result_shared`, Occurrence, should not decrease. Counts successful shares or copies only. It counts as **harmed** if P(share rate is at least 1 point lower in `feel`) ≥ 90%. Fewer than 5 shares per arm counts as **inconclusive**. |
 | Informational | `installer_download` (metric), `send_to_pc` and `feel_read_finished` (events). None of these can decide the result. |
 | Effect worth detecting | +5 points (8% → 13%). |
 | Honest power (exact Beta(1,1) computation, 8% baseline) | At 300 per arm, **an observed +4.3 points** is needed to reach 95%. Power is **80% only when the true gain is +6.4 points**, and about 55% at 150 per arm. **Only very large effects are detectable.** |
 | Validation (Development, labelled as validation, never as results) | An A/A run on `aa_check`. A planted-effect run on `effect_check`, which also demonstrates a rollout change. The browser end-to-end sessions double as the proof that transient identities reach the results. |
-| Final snapshot | First results refresh at or after Sat 28 Nov 2026 23:00 EST plus the measured ingestion lag (2 h by default), never later than Sun 29 Nov 01:00 EST. Raw JSON saved. Before then, look only at counts, for health. |
+| Final snapshot | First results refresh at or after Sat 28 Nov 2026 23:00 EST plus the measured ingestion lag (2 h by default), never later than Sun 29 Nov 01:00 EST. The lag is measured once, at launch, from the canary: one owner visit to `readsharp.app/reading-speed-test?canary` (identity `canary-<random uuid>`), from its exposure POST to the first results refresh that shows it. Raw JSON saved. Before then, look only at counts, for health. |
 
 ## Decision rule
 
