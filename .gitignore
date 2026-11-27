@@ -1,0 +1,8 @@
+.omc/
+.claude/
+.env*
+node_modules/
+dist/
+flagsmith.json
+test-results/
+playwright-report/

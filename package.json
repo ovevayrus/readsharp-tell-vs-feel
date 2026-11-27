@@ -1,0 +1,18 @@
+{
+  "name": "readsharp-tell-vs-feel",
+  "version": "0.1.0",
+  "private": true,
+  "description": "Tell vs Feel: a Flagsmith A/B experiment on ReadSharp's free reading speed test (Toggle Wars, Track 01).",
+  "license": "MIT",
+  "type": "module",
+  "scripts": {
+    "test": "node --test \"web/**/*.test.{js,mjs}\" \"sim/**/*.test.{js,mjs}\" \"analysis/**/*.test.{js,mjs}\" \"scripts/**/*.test.{js,mjs}\""
+  },
+  "engines": {
+    "node": ">=20"
+  },
+  "dependencies": {
+    "@flagsmith/flagsmith": "12.6.0",
+    "@flagsmith/nodejs": "^9.5.0"
+  }
+}
