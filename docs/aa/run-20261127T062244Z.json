@@ -1,0 +1,1 @@
+{"flag":"aa_check","n":1000,"seed":20261127,"pControl":0.1,"pVariant":0.1,"pShare":0.05,"evaluation":"local","arms":{"b":{"exposures":500,"get_readsharp":45,"result_shared":30},"control":{"exposures":500,"get_readsharp":52,"result_shared":29}},"errors":0,"startedAt":"2026-11-27T06:22:45.101Z","finishedAt":"2026-11-27T06:22:46.927Z"}

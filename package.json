@@ -16,6 +16,8 @@
     "@flagsmith/nodejs": "^9.5.0"
   },
   "devDependencies": {
+    "@axe-core/playwright": "4.11.1",
+    "@playwright/test": "1.58.2",
     "jsdom": "29.0.1"
   }
 }
