@@ -1,6 +1,6 @@
 # Runbook: Tell vs Feel, live on readsharp.app
 
-The Production experiment is **1512, "Tell vs Feel"**, on the flag `speed_test_next_step`. It was created at 2026-11-27 22:12:00Z and started at 22:12:27Z, with 100% rollout, tell 50 / feel 50, and the metrics `get_readsharp` (1571, primary), `result_shared` (1572, guardrail) and `installer_download` (1573, informational). EXPERIMENT.md was REGISTERED in commit `cd7ede6`, pushed at 22:08:43Z.
+The Production experiment is **1512, "Tell vs Feel"**, on the flag `speed_test_next_step`. It was created at 2026-11-27 22:12:00Z and started at 22:12:27Z, with 100% rollout, tell 50 / feel 50, and the metrics `get_readsharp` (1571, primary), `result_shared` (1572, guardrail) and `installer_download` (1573, informational). EXPERIMENT.md was REGISTERED in commit `cd7ede6`, pushed at 22:08:43Z. The start came 26 s after the creation, because the setup script reads the state back in between. For those 26 s the edge served the split without recording exposures. Visitors in that window are simply missing from the results.
 
 Until the final snapshot, **look only at counts, for health** (EXPERIMENT.md). None of the commands below show the probability or the interval.
 
@@ -70,6 +70,10 @@ The canary was one owner visit to `readsharp.app/reading-speed-test?canary`, mad
 
 Results are aggregate, with no per-identity lookup, so the canary counts as seen at the first recompute that shows at least 1 exposure and 1 `get_readsharp` in feel. At that point the warehouse held 3 events in total: the pre-flight event plus the canary's exposure and `get_readsharp`. So those counts can only be the canary. The polls are logged in [docs/proof/canary-polls.jsonl](proof/canary-polls.jsonl). **The canary was seen end to end** (validity gate 4 in EXPERIMENT.md).
 
+**The canary stays in the data.** Results are aggregate, so it can't be removed per identity: it is 1 feel exposure plus 1 feel `get_readsharp`. The final readout (Prompt D) must say so, and must also show the result with the canary subtracted (feel exposures −1, feel `get_readsharp` −1). At about 300 per arm, that's roughly 0.3 points against the 4.3 points needed to decide.
+
+**`?canary` is a public URL parameter.** Anyone who opens the page with it gets a `canary-` identity, and those identities can't be told apart in aggregate results. Only the owner's one visit at 22:13:09Z was the launch canary. Don't share links containing `?canary`.
+
 ## Kill switch (owner only)
 
 This sets the experiment's rollout to 0%: everyone then gets `tell` and nothing more is recorded. It is the only setting ever changed while the experiment runs, and only the owner triggers it.
@@ -79,7 +83,7 @@ node scripts/kill-switch.mjs
 node scripts/kill-switch.mjs --yes
 ```
 
-The first command is a dry run that shows what would be sent. The second sends it and reads the rollout back. The script copies the live experiment and changes only `rollout_percentage`. In the dashboard, the same change is Experiments → Tell vs Feel → rollout → 0%.
+The first command is a dry run that shows what would be sent. The second sends it, reads the experiment back, and exits 1 unless the rollout is now 0. The script copies the live experiment and changes only `rollout_percentage`. It was checked only as a dry run, never sent, so after `--yes` run the status command above and compare its output with the dry-run summary. In the dashboard, the same change is Experiments → Tell vs Feel → rollout → 0%.
 
 ## Rollback (owner only)
 
@@ -95,7 +99,7 @@ The backup holds 31 files, byte-identical to the pre-launch deployment `61a81834
 
 ## Final snapshot
 
-Take the first results refresh at or after **Sat 28 Nov 2026 23:00 EST plus the ingestion lag**. With the measured 6-minute lag, that is **the first refresh at or after Sat 28 Nov 23:06 EST (Sun 04:06Z)**. It must be **never later than Sun 29 Nov 01:00 EST**. Save the raw JSON, then run the analysis (Prompt D):
+Take the first results refresh at or after **Sat 28 Nov 2026 23:00 EST plus the ingestion lag**. With the measured 6-minute lag, that is **the first refresh at or after Sat 28 Nov 23:06 EST (Sun 04:06Z)**. It must be **never later than Sun 29 Nov 01:00 EST**. The 6 minutes comes from a single measurement and is an upper bound, so ingestion could have a tail. The rule stays as registered. Before saving, run the warehouse command: if `last_event_received_at` falls inside the 6 minutes before the refresh's `as_of`, the readout should say that the latest events may be missing. Save the raw JSON, then run the analysis (Prompt D):
 
 ```powershell
 Invoke-Flagsmith api "$E/experiments/1512/results/refresh/" -X POST

@@ -91,9 +91,12 @@ await wait(settled, 8000);
 await page.locator('[data-test-questions] button[type="submit"]').click();
 await page.locator('[data-test-result]').waitFor();
 const arm = (await page.locator('[data-feel-reader]').isVisible()) ? 'feel' : 'tell';
-await wait(() => sent().some((e) => e.event === '$flag_exposure' && e.status), mode === 'canary' ? 8000 : 3000);
+// The canary waits for its events to be answered; the smoke test watches 3 s for any stray event.
+const answered = (name) => () => sent().some((e) => e.event === name && e.status);
+const settleOn = (name) => (mode === 'canary' ? wait(answered(name), 8000) : new Promise((r) => setTimeout(r, 3000)));
+await settleOn('$flag_exposure');
 await page.locator('[data-get-readsharp]').click();
-await wait(() => (mode === 'canary' ? sent().some((e) => e.event === 'get_readsharp' && e.status) : false), mode === 'canary' ? 8000 : 3000);
+await settleOn('get_readsharp');
 await wait(settled, 12000);
 
 const flagsmith = reqs.map(({ events, ...r }) => ({ ...r, events: events.map((e) => e.event) }));
@@ -120,7 +123,7 @@ if (mode === 'smoke') {
 }
 checks.oneFlagsRequest = identities().length === 1;
 checks.noCspErrors = csp.length === 0;
-checks.allFlagsmith2xx = reqs.length > 0 && reqs.every((r) => r.status === undefined ? false : ok2xx(r));
+checks.allFlagsmith2xx = reqs.length > 0 && reqs.every(ok2xx);
 const pass = Object.values(checks).every(Boolean);
 const report = { mode, page: PAGE, started, arm, served, identifier: identities()[0]?.identifier ?? null, events, flagsmith, csp, checks, pass };
 writeFileSync(OUT,`${JSON.stringify(report, null, 2)}\n`);
