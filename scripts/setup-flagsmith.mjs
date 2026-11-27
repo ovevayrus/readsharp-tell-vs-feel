@@ -168,18 +168,30 @@ export function findDrift(spec, state, { complete = false } = {}) {
 		if (!detail) { problems.push(`${label} drift: its detail could not be read`); continue; }
 		if (detail.hypothesis !== undefined && detail.hypothesis !== experimentSpec.hypothesis) problems.push(`${label} drift: its hypothesis differs from the spec`);
 		const rollout = detail.experiment_rollout ?? {};
+		if (rollout.enabled !== true) problems.push(`${label} drift: its rollout is not enabled`);
 		if (Number(rollout.rollout_percentage) !== 100) problems.push(`${label} drift: rollout is not 100%`);
+		// The control value decides what "not feel" renders; a wrong one would mislabel exposures.
+		if (rollout.feature_state_value !== undefined && String(rollout.feature_state_value?.value ?? rollout.feature_state_value) !== flag.control) {
+			problems.push(`${label} drift: its control value is not ${flag.control}`);
+		}
+		if ((rollout.audience?.segments ?? rollout.audience?.segment_ids ?? []).length) problems.push(`${label} drift: it is limited to an audience`);
 		const allocations = rollout.multivariate_feature_state_values ?? [];
 		const share = 100 / (have.length + 1);
 		if (allocations.length !== have.length || allocations.some((a) => a.percentage_allocation !== share)) {
 			problems.push(`${label} drift: the split is not an even ${share}% per variation`);
 		}
+		const variantIds = (feature.variants ?? []).map((v) => v.id).filter((id) => id !== undefined);
+		const allocationIds = allocations.map((a) => a.multivariate_feature_option).filter((id) => id !== undefined);
+		if (variantIds.length && allocationIds.length && !sameSet(allocationIds.map(String), variantIds.map(String))) {
+			problems.push(`${label} drift: its split points at variations that are not the flag's`);
+		}
+		// Order matters: the first metric is the primary one.
 		const expected = experimentSpec.metrics.map((m) => {
 			const metric = state.metrics.find((x) => x.name === m.metric);
 			return `${metric?.id}:${m.expected_direction}`;
 		});
 		const actual = (detail.metrics ?? []).map((m) => `${idOf(m.metric)}:${m.expected_direction}`);
-		if (!sameSet(actual, expected)) problems.push(`${label} drift: its metrics differ from the spec`);
+		if (actual.join(' ') !== expected.join(' ')) problems.push(`${label} drift: its metrics differ from the spec (or are not in the spec's order)`);
 	}
 	return problems;
 }

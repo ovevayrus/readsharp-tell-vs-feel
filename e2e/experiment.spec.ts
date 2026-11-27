@@ -236,9 +236,13 @@ test('(e) on Windows the share button copies instead; only a successful copy cou
 	for (const clipboard of ['allow', 'deny'] as const) {
 		const s = await newSession(browser, { share: 'resolve', userAgent: WINDOWS_UA, clipboard });
 		await toResult(s.page);
+		tally.sessions++; tally.reachedResult++;
 		expect(await waitFor(() => s.rec.sent().some((e) => e.event === '$flag_exposure'))).toBe(true);
+		tally.exposed++;
+		tally.arms[await armOf(s.page)]++;
 		await s.page.locator('[data-share-result]').click();
 		if (clipboard === 'allow') {
+			tally.shared++;
 			expect(await waitFor(() => s.rec.sent().some((e) => e.event === 'result_shared')), 'a successful copy counts').toBe(true);
 		} else {
 			await s.page.waitForTimeout(2500);
@@ -250,10 +254,11 @@ test('(e) on Windows the share button copies instead; only a successful copy cou
 	}
 });
 
-test('(f) the installer event is delivered even though the click navigates away', async ({ browser }) => {
+test('(f) the installer event is delivered even though the click navigates away', async ({ browser, baseURL }) => {
 	const s = await newSession(browser, { userAgent: WINDOWS_UA });
-	// The installer link may point off-site; answer it locally so the test stays offline there.
-	await s.context.route((url) => !url.href.startsWith('http://127.0.0.1') && !FLAGSMITH.includes(url.origin), (route) =>
+	const siteOrigin = new URL(baseURL!).origin;
+	// The installer link points off-site; answer it locally so the test downloads nothing.
+	await s.context.route((url) => url.origin !== siteOrigin && !FLAGSMITH.includes(url.origin), (route) =>
 		route.fulfill({ status: 200, contentType: 'text/html', body: '<!doctype html><title>download</title>' }));
 	await toResult(s.page);
 	tally.sessions++; tally.reachedResult++;
@@ -261,9 +266,10 @@ test('(f) the installer event is delivered even though the click navigates away'
 	tally.exposed++;
 	tally.arms[await armOf(s.page)]++;
 	const before = s.page.url();
+	// The navigation starts when its request is issued (before the new document commits).
 	let navigationStartedAt = 0;
-	s.page.on('framenavigated', (frame) => {
-		if (frame === s.page.mainFrame() && frame.url() !== before && !navigationStartedAt) navigationStartedAt = Date.now();
+	s.page.on('request', (request) => {
+		if (request.isNavigationRequest() && request.frame() === s.page.mainFrame() && request.url() !== before && !navigationStartedAt) navigationStartedAt = Date.now();
 	});
 	await s.page.locator('[data-get-readsharp]').click();
 	tally.clickedGetReadSharp++;

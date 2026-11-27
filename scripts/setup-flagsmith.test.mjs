@@ -103,11 +103,11 @@ const spec = { flags: FLAGS, metrics: METRICS, experiments: EXPERIMENTS };
 const goodMetrics = METRICS.map((m, i) => ({ id: 100 + i, name: m.name, aggregation: m.aggregation, direction: m.direction, definition: { event: m.event } }));
 const goodDetail = {
 	id: 958,
-	experiment_rollout: { rollout_percentage: 100, multivariate_feature_state_values: [{ percentage_allocation: 50 }] },
+	experiment_rollout: { enabled: true, rollout_percentage: 100, feature_state_value: { type: 'string', value: 'tell' }, multivariate_feature_state_values: [{ multivariate_feature_option: 37718, percentage_allocation: 50 }], audience: { match: 'any', segments: [] } },
 	metrics: EXPERIMENTS.speed_test_next_step.metrics.map((m) => ({ metric: { id: 100 + METRICS.findIndex((x) => x.name === m.metric) }, expected_direction: m.expected_direction })),
 };
 const goodState = () => ({
-	features: [{ id: 1, name: 'speed_test_next_step', variants: [{ key: 'feel' }] }, { id: 2, name: 'aa_check', variants: [{ key: 'b' }] }],
+	features: [{ id: 1, name: 'speed_test_next_step', variants: [{ id: 37718, key: 'feel', value: 'feel' }] }, { id: 2, name: 'aa_check', variants: [{ id: 37719, key: 'b', value: 'b' }] }],
 	metrics: structuredClone(goodMetrics),
 	experiments: [{ id: 958, feature: { id: 1 }, status: 'running' }],
 	experimentDetails: { 958: structuredClone(goodDetail) },
@@ -190,4 +190,20 @@ test('NODE_DEBUG wildcards that enable child_process are refused, others are not
 	}
 	for (const value of ['', 'http', 'child_proc', 'net,tls']) assert.equal(childProcessDebugEnabled(value), false, value);
 	assert.throws(() => assertNoChildProcessDebug({}, true), /NODE_DEBUG/, 'the resolved debuglog state also counts');
+});
+
+test('findDrift: a disabled rollout, wrong control value, audience, foreign allocation or reordered metrics is drift', () => {
+	const cases = {
+		'rollout is not enabled': (d) => { d.experiment_rollout.enabled = false; },
+		'control value is not tell': (d) => { d.experiment_rollout.feature_state_value.value = 'feel'; },
+		'limited to an audience': (d) => { d.experiment_rollout.audience.segments = [5]; },
+		'variations that are not the flag': (d) => { d.experiment_rollout.multivariate_feature_state_values[0].multivariate_feature_option = 999; },
+		"not in the spec's order": (d) => { d.metrics.reverse(); },
+	};
+	for (const [message, mutate] of Object.entries(cases)) {
+		const state = goodState();
+		mutate(state.experimentDetails[958]);
+		assert.ok(findDrift(spec, state).join('\n').includes(message), message);
+	}
+	assert.deepEqual(findDrift(spec, goodState(), { complete: true }), [], 'the realistic good state still has no drift');
 });
