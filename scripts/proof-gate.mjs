@@ -33,6 +33,15 @@ export function summarize(payload, primaryMetricId) {
 	return { exposures, conversions };
 }
 
+/** Why a snapshot cannot serve as the "before" baseline (null when it can). Pure. */
+export function staleSnapshot(snap, maxAgeMs = 120_000) {
+	if (!snap.asOf || !snap.takenAt) return 'the results have no timestamp';
+	if (!snap.refreshed || Date.parse(snap.takenAt) - Date.parse(snap.asOf) > maxAgeMs) {
+		return `the results are cached (as of ${snap.asOf.slice(11, 19)} UTC; Flagsmith recomputes at most every 5 minutes). Take the snapshot again after ${new Date(Date.parse(snap.asOf) + 5 * 60_000 + 15_000).toISOString().slice(11, 19)} UTC`;
+	}
+	return null;
+}
+
 /** Why an e2e tally cannot be used as proof (empty when it can). Pure. */
 export function tallyProblems(before, counts) {
 	const problems = [];
@@ -80,9 +89,10 @@ function snapshot() {
 		.find((x) => (x.feature?.name ?? '') === FLAG && !['ended', 'completed'].includes(String(x.status)));
 	if (!experiment) throw new Error(`No active Development experiment on ${FLAG}`);
 	const metric = list(JSON.parse(cli(['api', `${base}/experiment-metrics/`], 'list metrics'))).find((m) => m.name === PRIMARY_EVENT);
-	try { cli(['api', `${base}/experiments/${experiment.id}/results/refresh/`, '-X', 'POST'], 'refresh results'); } catch { /* at most once per 5 minutes; read the latest results */ }
+	let refreshed = true;
+	try { cli(['api', `${base}/experiments/${experiment.id}/results/refresh/`, '-X', 'POST'], 'refresh results'); } catch { refreshed = false; /* at most once per 5 minutes */ }
 	const results = JSON.parse(cli(['api', `${base}/experiments/${experiment.id}/results/`], 'read results')).results;
-	return { experiment: experiment.id, takenAt: new Date().toISOString(), asOf: results?.as_of ?? null, ...summarize(results?.payload, metric?.id) };
+	return { experiment: experiment.id, takenAt: new Date().toISOString(), refreshed, asOf: results?.as_of ?? null, ...summarize(results?.payload, metric?.id) };
 }
 
 function save(file, data) {
@@ -95,6 +105,11 @@ export function main(argv = process.argv.slice(2)) {
 	const [command, first, second] = argv;
 	if (command === 'snapshot' && first) {
 		const snap = snapshot();
+		const problem = staleSnapshot(snap);
+		if (problem) {
+			console.error(`PROOF GATE: no snapshot saved: ${problem}`);
+			return 1;
+		}
 		save(first, snap);
 		console.log(JSON.stringify(snap));
 		return 0;

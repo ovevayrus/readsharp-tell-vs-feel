@@ -1,6 +1,6 @@
 import assert from 'node:assert/strict';
 import { test } from 'node:test';
-import { compare, summarize, tallyProblems } from './proof-gate.mjs';
+import { compare, staleSnapshot, summarize, tallyProblems } from './proof-gate.mjs';
 
 // Shape of GET .../experiments/<id>/results/ -> results.payload, as Flagsmith returned it overnight.
 const payload = (feel, control, feelSum, controlSum) => ({
@@ -52,4 +52,11 @@ test('a tally from a failed, older, other-experiment or click-less run is refuse
 	assert.match(tallyProblems(before, { ...good, at: '2026-11-27T15:59:00Z' }).join(), /not newer than the before snapshot/);
 	assert.match(tallyProblems(before, { ...good, clicksByArm: { tell: 0, feel: 4 } }).join(), /no Get ReadSharp clicks in the tell arm/);
 	assert.match(tallyProblems({ experiment: 958 }, good).join(), /not newer/, 'a snapshot without takenAt cannot be trusted');
+});
+
+test('a before snapshot must come from a fresh recompute', () => {
+	assert.equal(staleSnapshot({ refreshed: true, asOf: '2026-11-27T19:45:47Z', takenAt: '2026-11-27T19:45:49Z' }), null);
+	assert.match(staleSnapshot({ refreshed: false, asOf: '2026-11-27T19:45:47Z', takenAt: '2026-11-27T19:45:49Z' }), /cached/);
+	assert.match(staleSnapshot({ refreshed: true, asOf: '2026-11-27T19:30:00Z', takenAt: '2026-11-27T19:45:49Z' }), /again after 19:35:15/);
+	assert.match(staleSnapshot({ refreshed: true, takenAt: '2026-11-27T19:45:49Z' }), /no timestamp/);
 });
