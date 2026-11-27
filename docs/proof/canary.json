@@ -1,0 +1,90 @@
+{
+  "mode": "canary",
+  "page": "https://readsharp.app/reading-speed-test?canary",
+  "started": "2026-11-27T22:13:10.910Z",
+  "arm": "feel",
+  "served": {
+    "value": "feel",
+    "enabled": true,
+    "experiment": {
+      "id": 1512,
+      "in_experiment": true,
+      "name": "Tell vs Feel"
+    }
+  },
+  "identifier": "canary-0c928a42-eaef-4225-abb8-bd4be1fcbd86",
+  "events": [
+    {
+      "event": "$flag_exposure",
+      "identifier": "canary-0c928a42-eaef-4225-abb8-bd4be1fcbd86",
+      "value": "feel",
+      "experiment": 1512,
+      "status": 202,
+      "sentAt": "2026-11-27T22:13:12.508Z"
+    },
+    {
+      "event": "get_readsharp",
+      "identifier": "canary-0c928a42-eaef-4225-abb8-bd4be1fcbd86",
+      "value": null,
+      "experiment": null,
+      "status": 202,
+      "sentAt": "2026-11-27T22:13:13.153Z"
+    }
+  ],
+  "flagsmith": [
+    {
+      "method": "GET",
+      "path": "/api/v1/identities/",
+      "identifier": "canary-0c928a42-eaef-4225-abb8-bd4be1fcbd86",
+      "transient": "true",
+      "sentAt": "2026-11-27T22:13:11.970Z",
+      "status": 200,
+      "answeredAt": "2026-11-27T22:13:12.439Z",
+      "served": {
+        "value": "feel",
+        "enabled": true,
+        "experiment": {
+          "id": 1512,
+          "in_experiment": true,
+          "name": "Tell vs Feel"
+        }
+      },
+      "events": []
+    },
+    {
+      "method": "POST",
+      "path": "/v1/events",
+      "identifier": null,
+      "transient": null,
+      "sentAt": "2026-11-27T22:13:12.508Z",
+      "status": 202,
+      "answeredAt": "2026-11-27T22:13:13.103Z",
+      "events": [
+        "$flag_exposure"
+      ]
+    },
+    {
+      "method": "POST",
+      "path": "/v1/events",
+      "identifier": null,
+      "transient": null,
+      "sentAt": "2026-11-27T22:13:13.153Z",
+      "status": 202,
+      "answeredAt": "2026-11-27T22:13:13.478Z",
+      "events": [
+        "get_readsharp"
+      ]
+    }
+  ],
+  "csp": [],
+  "checks": {
+    "canaryIdentity": true,
+    "exposure2xx": true,
+    "getReadsharp2xx": true,
+    "inExperiment": true,
+    "oneFlagsRequest": true,
+    "noCspErrors": true,
+    "allFlagsmith2xx": true
+  },
+  "pass": true
+}
