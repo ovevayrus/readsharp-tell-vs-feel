@@ -1,6 +1,6 @@
 import assert from 'node:assert/strict';
 import { test } from 'node:test';
-import { compare, summarize } from './proof-gate.mjs';
+import { compare, summarize, tallyProblems } from './proof-gate.mjs';
 
 // Shape of GET .../experiments/<id>/results/ -> results.payload, as Flagsmith returned it overnight.
 const payload = (feel, control, feelSum, controlSum) => ({
@@ -41,4 +41,15 @@ test('missing conversions fail the gate even when exposures arrived', () => {
 test('an arm with no e2e sessions cannot pass vacuously', () => {
 	const before = summarize(payload(38, 46, 20, 22), 1012);
 	assert.equal(compare(before, before, { arms: { tell: 0, feel: 0 }, clicksByArm: {} }).pass, false);
+});
+
+test('a tally from a failed, older, other-experiment or click-less run is refused', () => {
+	const before = { experiment: 958, takenAt: '2026-11-27T16:00:00Z' };
+	const good = { complete: true, experiment: 958, at: '2026-11-27T16:05:00Z', clicksByArm: { tell: 3, feel: 4 } };
+	assert.deepEqual(tallyProblems(before, good), []);
+	assert.match(tallyProblems(before, { ...good, complete: false }).join(), /did not pass in full/);
+	assert.match(tallyProblems(before, { ...good, experiment: 965 }).join(), /different experiment/);
+	assert.match(tallyProblems(before, { ...good, at: '2026-11-27T15:59:00Z' }).join(), /not newer than the before snapshot/);
+	assert.match(tallyProblems(before, { ...good, clicksByArm: { tell: 0, feel: 4 } }).join(), /no Get ReadSharp clicks in the tell arm/);
+	assert.match(tallyProblems({ experiment: 958 }, good).join(), /not newer/, 'a snapshot without takenAt cannot be trusted');
 });

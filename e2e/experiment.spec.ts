@@ -404,7 +404,13 @@ test('axe: no violations in the result card and the Feel reader', async ({ brows
 	expect(found.tell && found.feel, 'both arms checked').toBe(true);
 });
 
+// The proof gate accepts a tally only from a run in which every test passed.
+let allPassed = true;
+test.afterEach(({}, testInfo) => {
+	if (testInfo.status !== testInfo.expectedStatus) allPassed = false;
+});
+
 test.afterAll(() => {
 	mkdirSync('test-results', { recursive: true });
-	writeFileSync('test-results/e2e-counts.json', `${JSON.stringify({ ...tally, at: new Date().toISOString() }, null, 2)}\n`);
+	writeFileSync('test-results/e2e-counts.json', `${JSON.stringify({ ...tally, complete: allPassed, experiment: EXPERIMENT_ID, at: new Date().toISOString() }, null, 2)}\n`);
 });
