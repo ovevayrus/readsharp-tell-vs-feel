@@ -115,7 +115,9 @@ New-Item -ItemType Directory -Force docs/results | Out-Null
 node analysis/results.mjs --env production --experiment 1512 --refresh --save docs/results/final-snapshot.json --wiring <pass|fail> --canary <seen|missing>
 ```
 
-Add `--subtract-canary feel` for the run with the launch canary removed. Which of the two runs the decision uses is not fixed in EXPERIMENT.md; settle it before the snapshot (proposed: the unadjusted run decides, the canary-subtracted run is reported next to it).
+Add `--subtract-canary feel` for the run with the launch canary removed. EXPERIMENT.md doesn't say which of the two runs the decision uses.
+
+**Decided by the owner on Sat 28 Nov 2026 at 02:09 EST, before the final snapshot and without seeing any win probability or interval:** the **unadjusted** run decides, because it uses Flagsmith's own numbers, the registered source. The run with the canary subtracted is reported next to it. If the two runs land on different branches of the rule, the README and DECISION.md must say so plainly.
 
 ## Help
 
