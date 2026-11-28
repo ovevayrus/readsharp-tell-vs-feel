@@ -1,0 +1,106 @@
+{
+  "source": "synthetic test fixture",
+  "label": "TEST FIXTURE",
+  "environment": {
+    "id": 1,
+    "name": "Development"
+  },
+  "experiment": {
+    "id": 1,
+    "name": "fixture",
+    "flag": "test_flag",
+    "status": "running",
+    "started_at": "2026-11-27T06:00:00Z",
+    "control_value": "a",
+    "variants": [
+      {
+        "id": 2,
+        "key": "b",
+        "value": "b"
+      }
+    ],
+    "metrics": [
+      {
+        "metric": 10,
+        "metric_name": "get_readsharp",
+        "expected_direction": "increase",
+        "aggregation": "occurrence"
+      },
+      {
+        "metric": 11,
+        "metric_name": "result_shared",
+        "expected_direction": "not_decrease",
+        "aggregation": "occurrence"
+      }
+    ]
+  },
+  "fetched_at": "2026-11-28T00:00:00Z",
+  "results": {
+    "as_of": "2026-11-28T00:00:00Z",
+    "last_error_at": null,
+    "is_final": false,
+    "payload": {
+      "srm_p_value": null,
+      "exposures_timeseries": {
+        "granularity": "hour",
+        "points": [
+          {
+            "bucket": "2026-11-27T06:00:00+00:00",
+            "new_identities": {
+              "control": 40,
+              "b": 40
+            }
+          }
+        ]
+      },
+      "metrics": [
+        {
+          "metric_id": 10,
+          "variants": {
+            "control": {
+              "n": 40,
+              "sum": 5,
+              "sum_squares": 5
+            },
+            "b": {
+              "n": 40,
+              "sum": 6,
+              "sum_squares": 6
+            }
+          },
+          "inference": {
+            "b": {
+              "lift": 0.19999999999999996,
+              "ci_low": -0.3,
+              "ci_high": 0.5,
+              "chance_to_win": 0.5
+            }
+          }
+        },
+        {
+          "metric_id": 11,
+          "variants": {
+            "control": {
+              "n": 40,
+              "sum": 4,
+              "sum_squares": 4
+            },
+            "b": {
+              "n": 40,
+              "sum": 4,
+              "sum_squares": 4
+            }
+          },
+          "inference": {
+            "b": {
+              "lift": 0,
+              "ci_low": -0.3,
+              "ci_high": 0.3,
+              "chance_to_win": 0.5
+            }
+          }
+        }
+      ]
+    }
+  }
+}

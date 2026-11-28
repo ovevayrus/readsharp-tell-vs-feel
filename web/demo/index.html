@@ -1,0 +1,50 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Tell vs Feel result step demo</title>
+<style>
+  body { font: 16px/1.5 system-ui, sans-serif; max-width: 40rem; margin: 1.5rem auto; padding: 0 1rem; color: #1b1b1f; background: #fff; }
+  .caption { background: #fff4d6; border: 1px solid #e0c36a; padding: .5rem .75rem; border-radius: 6px; font-size: .9rem; }
+  button { font: inherit; padding: .5rem 1rem; margin: .25rem .5rem .25rem 0; cursor: pointer; }
+  button:disabled { cursor: default; }
+  .card { border: 1px solid #c9c9d1; border-radius: 8px; padding: 1rem; margin-top: 1rem; }
+  .feel-reader-word { font: 2rem/1.2 ui-monospace, monospace; min-height: 2.5rem; text-align: center; white-space: pre; }
+  .feel-reader-pivot { color: #c0392b; }
+  .feel-reader-outcome { min-height: 1.5rem; }
+  .note { color: #3a5a3a; font-size: .9rem; min-height: 1.4rem; }
+  #debug { margin-top: 1.5rem; font: .85rem/1.4 ui-monospace, monospace; background: #f3f3f6; padding: .5rem .75rem; border-radius: 6px; }
+  #debug dt { float: left; clear: left; width: 8rem; font-weight: 600; }
+  #debug dd { margin: 0 0 0 8rem; overflow-wrap: anywhere; }
+  [hidden] { display: none; }
+</style>
+</head>
+<body data-fs-key="__FS_DEV_CLIENT_KEY__">
+<h1>Result step demo</h1>
+<p class="caption">Demo with a STAND-IN reading engine, not ReadSharp's. Talks to: <strong>Flagsmith Development</strong>.</p>
+<p>Press Start, then Show my result. The arm is decided when the result renders.</p>
+<button id="start" type="button">Start</button>
+<button id="show" type="button" disabled>Show my result</button>
+<div id="result" hidden>
+  <p id="measured"></p>
+  <p id="practice"></p>
+  <div id="reader" hidden></div>
+  <div class="card">
+    <strong>Your result</strong>
+    <p id="card-text"></p>
+    <button id="get" type="button">Get ReadSharp</button>
+    <button id="share" type="button">Share my result</button>
+    <p id="note" class="note" role="status"></p>
+  </div>
+</div>
+<p id="ineligible" hidden>Nothing was set up or sent: this visitor is not eligible, so the result shows "tell".</p>
+<dl id="debug">
+  <dt>eligible</dt><dd id="d-eligible">not checked</dd>
+  <dt>arm</dt><dd id="d-arm">-</dd>
+  <dt>identity</dt><dd id="d-identity">-</dd>
+  <dt>exposure sent</dt><dd id="d-exposed">-</dd>
+</dl>
+<script type="module" src="./demo.js"></script>
+</body>
+</html>

@@ -26,6 +26,8 @@
 //     metrics, 100% rollout and an even split; --start starts it.
 // A second run creates nothing. Features are project-wide in Flagsmith, so creating a flag also
 // gives other environments a feature state; those stay disabled until this script runs for them.
+// Once an experiment is completed (scripts/complete-experiment.mjs), its rollout decision is what
+// the flag serves, and this script leaves that flag's state alone.
 import { execFileSync } from 'node:child_process';
 import { debuglog } from 'node:util';
 import { pathToFileURL } from 'node:url';
@@ -41,6 +43,13 @@ export const FLAGS = [
 	{
 		name: 'aa_check',
 		description: 'A/A validation flag. Development only; both arms behave the same.',
+		control: 'a',
+		variants: [{ value: 'b', key: 'b' }],
+		environments: ['development'],
+	},
+	{
+		name: 'effect_check',
+		description: 'Planted-effect validation flag. Development only; scripted traffic converts more in b.',
 		control: 'a',
 		variants: [{ value: 'b', key: 'b' }],
 		environments: ['development'],
@@ -69,6 +78,14 @@ export const EXPERIMENTS = {
 	aa_check: {
 		name: 'A/A check',
 		hypothesis: 'A/A validation: both arms are identical, so no difference in get_readsharp or result_shared is expected. Validation only, never a result.',
+		metrics: [
+			{ metric: 'get_readsharp', expected_direction: 'increase' },
+			{ metric: 'result_shared', expected_direction: 'not_decrease' },
+		],
+	},
+	effect_check: {
+		name: 'Planted effect check',
+		hypothesis: 'Planted-effect validation: scripted traffic converts at 10% in control and 15% in b, so b should beat control on get_readsharp, with result_shared unchanged. Validation only, never a result.',
 		metrics: [
 			{ metric: 'get_readsharp', expected_direction: 'increase' },
 			{ metric: 'result_shared', expected_direction: 'not_decrease' },
@@ -145,10 +162,12 @@ export function plan({ env, createExperiment, start }, state) {
 			if (!feature?.variants?.some((v) => v.key === variant.key)) actions.push({ type: 'add-variant', flag, variant });
 		}
 		const locked = state.experiments.some((x) => featureId(x) === feature?.id && ACTIVE(x));
+		// A completed experiment's rollout decision is what the flag serves now; setup must not undo it.
+		const rolledOut = !locked && state.experiments.some((x) => featureId(x) === feature?.id && x.rollout_decision != null);
 		const fs = state.featureStates[flag.name];
 		const needsState = !fs || fs.enabled !== true || String(fs.value) !== flag.control
 			|| (fs.allocations ?? []).some((a) => Number(a.percentage_allocation) !== 0);
-		if (needsState && !locked) actions.push({ type: 'set-feature-state', flag });
+		if (needsState && !locked && !rolledOut) actions.push({ type: 'set-feature-state', flag });
 	}
 	for (const metric of METRICS) {
 		if (!state.metrics.some((m) => m.name === metric.name)) actions.push({ type: 'create-metric', metric });

@@ -77,6 +77,15 @@ test('the flag spec keeps every variation keyed and the metrics match the plan',
 		{ metric: 'installer_download', expected_direction: 'increase' },
 	]);
 	assert.ok(!FLAGS.find((f) => f.name === 'aa_check').environments.includes('production'));
+	const effect = FLAGS.find((f) => f.name === 'effect_check');
+	assert.equal(effect.control, 'a');
+	assert.deepEqual(effect.variants, [{ value: 'b', key: 'b' }]);
+	assert.deepEqual(effect.environments, ['development']);
+	assert.deepEqual(EXPERIMENTS.effect_check.metrics, [
+		{ metric: 'get_readsharp', expected_direction: 'increase' },
+		{ metric: 'result_shared', expected_direction: 'not_decrease' },
+	]);
+	assert.match(EXPERIMENTS.effect_check.hypothesis, /Validation only, never a result\./);
 });
 
 const empty = { features: [], featureStates: {}, metrics: [], experiments: [] };
@@ -85,14 +94,15 @@ test('an empty Development environment gets flags, states and metrics, and no ex
 	assert.deepEqual(types(plan({ env: 'development' }, empty)), [
 		'create-feature', 'add-variant', 'set-feature-state',
 		'create-feature', 'add-variant', 'set-feature-state',
+		'create-feature', 'add-variant', 'set-feature-state',
 		'create-metric', 'create-metric', 'create-metric',
 	]);
 	assert.ok(types(plan({ env: 'development', createExperiment: 'speed_test_next_step', start: true }, empty)).includes('create-experiment'));
 });
 
-test('Production setup never touches aa_check and never plans an experiment', () => {
+test('Production setup never touches aa_check or effect_check and never plans an experiment', () => {
 	const actions = plan({ env: 'production' }, empty);
-	assert.ok(actions.every((a) => a.flag?.name !== 'aa_check'));
+	assert.ok(actions.every((a) => a.flag?.name !== 'aa_check' && a.flag?.name !== 'effect_check'));
 	assert.ok(!types(actions).some((t) => t.includes('experiment')));
 });
 
@@ -100,10 +110,12 @@ const done = {
 	features: [
 		{ id: 1, name: 'speed_test_next_step', variants: [{ id: 11, key: 'feel' }] },
 		{ id: 2, name: 'aa_check', variants: [{ id: 21, key: 'b' }] },
+		{ id: 3, name: 'effect_check', variants: [{ id: 31, key: 'b' }] },
 	],
 	featureStates: {
 		speed_test_next_step: { enabled: true, value: 'tell', allocations: [{ percentage_allocation: 0 }] },
 		aa_check: { enabled: true, value: 'a', allocations: [{ percentage_allocation: 0 }] },
+		effect_check: { enabled: true, value: 'a', allocations: [{ percentage_allocation: 0 }] },
 	},
 	metrics: METRICS.map((m, i) => ({ id: 100 + i, name: m.name })),
 	// The experiments list nests the feature as an object.
@@ -117,6 +129,24 @@ test('a second run creates nothing (idempotent), including with --create-experim
 	assert.deepEqual(plan({ env: 'development' }, done), []);
 	assert.deepEqual(plan({ env: 'development', createExperiment: 'speed_test_next_step', start: true }, done), []);
 	assert.deepEqual(plan({ env: 'development', createExperiment: 'aa_check', start: true }, done), []);
+	const effectRunning = { ...done, experiments: [...done.experiments, { id: 970, feature: { id: 3, name: 'effect_check' }, status: 'running' }] };
+	assert.deepEqual(plan({ env: 'development', createExperiment: 'effect_check', start: true }, effectRunning), []);
+	assert.deepEqual(types(plan({ env: 'development', createExperiment: 'effect_check', start: true }, done)), ['create-experiment', 'start-experiment']);
+});
+
+test('a completed experiment keeps its rolled-out value: setup does not reset the flag', () => {
+	// After complete/ with rollout_decision "variant", effect_check serves b, not the control a.
+	const rolledOut = {
+		...done,
+		featureStates: { ...done.featureStates, effect_check: { enabled: true, value: 'b', allocations: [{ percentage_allocation: 0 }] } },
+		experiments: [...done.experiments, { id: 970, feature: { id: 3 }, status: 'completed', rollout_decision: 'variant', rollout_variant: 31 }],
+	};
+	assert.deepEqual(plan({ env: 'development' }, rolledOut), []);
+	const asAllocation = { ...rolledOut, featureStates: { ...rolledOut.featureStates, effect_check: { enabled: true, value: 'a', allocations: [{ percentage_allocation: 100 }] } } };
+	assert.deepEqual(plan({ env: 'development' }, asAllocation), []);
+	// Without a rollout decision the drifted state is still corrected.
+	const noDecision = { ...rolledOut, experiments: [...done.experiments, { id: 970, feature: { id: 3 }, status: 'completed', rollout_decision: null }] };
+	assert.deepEqual(types(plan({ env: 'development' }, noDecision)), ['set-feature-state']);
 });
 
 test('a created but unstarted experiment is started, not duplicated', () => {

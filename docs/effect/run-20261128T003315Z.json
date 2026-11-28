@@ -1,0 +1,1 @@
+{"flag":"effect_check","n":1000,"seed":20261128,"pControl":0.1,"pVariant":0.15,"pShare":0.05,"evaluation":"local","counts":"queued by the SDK","arms":{"control":{"exposures":498,"get_readsharp":43,"result_shared":18},"b":{"exposures":502,"get_readsharp":78,"result_shared":18}},"errors":0,"startedAt":"2026-11-28T00:33:15.281Z","finishedAt":"2026-11-28T00:33:17.791Z"}

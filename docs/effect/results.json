@@ -1,0 +1,130 @@
+{
+  "source": "Flagsmith Admin API, environments/<key>/experiments/1514/results/",
+  "environment": {
+    "id": 121321,
+    "name": "Development"
+  },
+  "experiment": {
+    "id": 1514,
+    "name": "Planted effect check",
+    "flag": "effect_check",
+    "status": "running",
+    "started_at": "2026-11-28T00:31:27.591090Z",
+    "control_value": "a",
+    "variants": [
+      {
+        "id": 38406,
+        "key": "b",
+        "value": "b"
+      }
+    ],
+    "metrics": [
+      {
+        "metric": 1012,
+        "metric_name": "get_readsharp",
+        "expected_direction": "increase",
+        "aggregation": "occurrence"
+      },
+      {
+        "metric": 1013,
+        "metric_name": "result_shared",
+        "expected_direction": "not_decrease",
+        "aggregation": "occurrence"
+      }
+    ]
+  },
+  "fetched_at": "2026-11-28T00:34:01.311Z",
+  "results": {
+    "as_of": "2026-11-28T00:33:57.485778Z",
+    "last_error_at": null,
+    "refresh_requested_at": "2026-11-28T00:33:57.355482Z",
+    "payload": {
+      "metrics": [
+        {
+          "variants": {
+            "b": {
+              "n": 502,
+              "sum": 78,
+              "sum_squares": 78
+            },
+            "control": {
+              "n": 498,
+              "sum": 43,
+              "sum_squares": 43
+            }
+          },
+          "inference": {
+            "b": {
+              "lift": 0.7994996757157415,
+              "ci_low": 0.16719404854418618,
+              "ci_high": 1.4318053028872968,
+              "chance_to_win": 0.9933979598424881
+            }
+          },
+          "metric_id": 1012,
+          "conversions_timeseries": {
+            "points": [
+              {
+                "bucket": "2026-11-28T00:00:00+00:00",
+                "converted_identities": {
+                  "b": 78,
+                  "control": 43
+                }
+              }
+            ],
+            "granularity": "hour"
+          }
+        },
+        {
+          "variants": {
+            "b": {
+              "n": 502,
+              "sum": 18,
+              "sum_squares": 18
+            },
+            "control": {
+              "n": 498,
+              "sum": 18,
+              "sum_squares": 18
+            }
+          },
+          "inference": {
+            "b": {
+              "lift": -0.007968127490039719,
+              "ci_low": -0.6449478175586321,
+              "ci_high": 0.6290115625785526,
+              "chance_to_win": 0.4902198540145956
+            }
+          },
+          "metric_id": 1013,
+          "conversions_timeseries": {
+            "points": [
+              {
+                "bucket": "2026-11-28T00:00:00+00:00",
+                "converted_identities": {
+                  "b": 18,
+                  "control": 18
+                }
+              }
+            ],
+            "granularity": "hour"
+          }
+        }
+      ],
+      "srm_p_value": null,
+      "exposures_timeseries": {
+        "points": [
+          {
+            "bucket": "2026-11-28T00:00:00+00:00",
+            "new_identities": {
+              "b": 502,
+              "control": 498
+            }
+          }
+        ],
+        "granularity": "hour"
+      }
+    },
+    "is_final": false
+  }
+}

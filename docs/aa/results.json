@@ -1,0 +1,131 @@
+{
+  "source": "Flagsmith Admin API, GET environments/<Development key>/experiments/965/results/ after one POST .../results/refresh/ at 2026-11-28T00:20:35Z (Phase C, C-02)",
+  "label": "VALIDATION (A/A on aa_check, scripted traffic). Never a result.",
+  "environment": {
+    "id": 121321,
+    "name": "Development"
+  },
+  "experiment": {
+    "id": 965,
+    "name": "A/A check",
+    "flag": "aa_check",
+    "status": "running",
+    "started_at": "2026-11-27T06:10:41.284807Z",
+    "control_value": "a",
+    "variants": [
+      {
+        "id": 37719,
+        "key": "b",
+        "value": "b"
+      }
+    ],
+    "metrics": [
+      {
+        "metric": 1012,
+        "metric_name": "get_readsharp",
+        "expected_direction": "increase",
+        "aggregation": "occurrence"
+      },
+      {
+        "metric": 1013,
+        "metric_name": "result_shared",
+        "expected_direction": "not_decrease",
+        "aggregation": "occurrence"
+      }
+    ]
+  },
+  "fetched_at": "2026-11-28T00:24:18.828Z",
+  "results": {
+    "as_of": "2026-11-28T00:20:35.622168Z",
+    "last_error_at": null,
+    "refresh_requested_at": "2026-11-28T00:20:35.540497Z",
+    "payload": {
+      "metrics": [
+        {
+          "variants": {
+            "b": {
+              "n": 500,
+              "sum": 45,
+              "sum_squares": 45
+            },
+            "control": {
+              "n": 500,
+              "sum": 52,
+              "sum_squares": 52
+            }
+          },
+          "inference": {
+            "b": {
+              "lift": -0.1346153846153846,
+              "ci_low": -0.4631909366760588,
+              "ci_high": 0.19396016744528957,
+              "chance_to_win": 0.21099164424824374
+            }
+          },
+          "metric_id": 1012,
+          "conversions_timeseries": {
+            "points": [
+              {
+                "bucket": "2026-11-27T06:00:00+00:00",
+                "converted_identities": {
+                  "b": 45,
+                  "control": 52
+                }
+              }
+            ],
+            "granularity": "hour"
+          }
+        },
+        {
+          "variants": {
+            "b": {
+              "n": 500,
+              "sum": 30,
+              "sum_squares": 30
+            },
+            "control": {
+              "n": 500,
+              "sum": 29,
+              "sum_squares": 29
+            }
+          },
+          "inference": {
+            "b": {
+              "lift": 0.034482758620689564,
+              "ci_low": -0.47822652303415175,
+              "ci_high": 0.5471920402755309,
+              "chance_to_win": 0.5524363792024397
+            }
+          },
+          "metric_id": 1013,
+          "conversions_timeseries": {
+            "points": [
+              {
+                "bucket": "2026-11-27T06:00:00+00:00",
+                "converted_identities": {
+                  "b": 30,
+                  "control": 29
+                }
+              }
+            ],
+            "granularity": "hour"
+          }
+        }
+      ],
+      "srm_p_value": null,
+      "exposures_timeseries": {
+        "points": [
+          {
+            "bucket": "2026-11-27T06:00:00+00:00",
+            "new_identities": {
+              "b": 500,
+              "control": 500
+            }
+          }
+        ],
+        "granularity": "hour"
+      }
+    },
+    "is_final": false
+  }
+}

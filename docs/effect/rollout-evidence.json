@@ -1,0 +1,65 @@
+{
+  "label": "VALIDATION (Development, scripted traffic). Round 4 rollout on the planted-effect run. Never a result.",
+  "experiment": {
+    "id": 1514,
+    "name": "Planted effect check",
+    "flag": "effect_check",
+    "environment": "Development (121321)"
+  },
+  "decision": {
+    "analysis": "docs/effect/analysis.md: P(b beats control) = 0.9996, guardrail result_shared not harmed, branch 2 (ship the variant)",
+    "rollout": "b"
+  },
+  "served_before_completion": {
+    "flag": "effect_check",
+    "environment": "Development",
+    "checkedAt": "2026-11-28T00:34:21.982Z",
+    "environmentDefault": "a",
+    "freshIdentities": 20,
+    "values": {
+      "a": 9,
+      "b": 11
+    }
+  },
+  "completion": {
+    "command": "node scripts/complete-experiment.mjs --flag effect_check --rollout b --yes",
+    "api": "POST environments/<Development key>/experiments/1514/complete/ {rollout_decision: \"variant\", rollout_variant: 38406}",
+    "read_back": {
+      "experiment": 1514,
+      "status": "completed",
+      "ended_at": "2026-11-28T00:34:24.356856Z",
+      "rollout_decision": "variant",
+      "rollout_variant": 38406
+    }
+  },
+  "served_after_completion": {
+    "flag": "effect_check",
+    "environment": "Development",
+    "checkedAt": "2026-11-28T00:34:38.862Z",
+    "environmentDefault": "a",
+    "freshIdentities": 20,
+    "values": {
+      "b": 20
+    }
+  },
+  "flag_state_after": {
+    "enabled": true,
+    "value": "a",
+    "multivariate_allocation_b": 100,
+    "note": "Flagsmith applies the decision as b at 100% of identities over the base value a. Requests with an identity (the browser SDK always identifies, with a transient random ID) get b; a request with no identity reads the base value a."
+  },
+  "setup_rerun_after": "node scripts/setup-flagsmith.mjs --env development --dry-run -> \"Development: nothing to create\" (the completed experiment keeps its rollout)",
+  "production_unchanged": {
+    "checked_at": "2026-11-28T00:35:23.269Z",
+    "experiment_1512": {
+      "status": "running",
+      "rollout": 100,
+      "split_feel": 50,
+      "control": "tell"
+    },
+    "production_experiments": [
+      "1512 Tell vs Feel (running)"
+    ],
+    "effect_check_in_production": "disabled, value a (flags are project-wide in Flagsmith; never enabled there)"
+  }
+}
