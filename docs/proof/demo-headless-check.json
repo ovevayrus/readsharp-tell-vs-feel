@@ -1,0 +1,45 @@
+{
+ "checkedAt": "2026-11-28T00:40:39.443Z",
+ "source": "fresh git clone of commit under test, npm ci, web/demo server, Chrome headless, timezone America/New_York, Flagsmith Development",
+ "views": 12,
+ "arms": {
+  "feel": 6,
+  "tell": 6
+ },
+ "allExposed": true,
+ "exposureVariantMatchesArm": true,
+ "readerOnlyInFeel": true,
+ "noRequestsBeforeStart": true,
+ "oneIdentifierPerView": true,
+ "getReadsharpSent": [
+  true,
+  true,
+  true,
+  true
+ ],
+ "non2xx": 0,
+ "origins": [
+  "https://edge.api.flagsmith.com",
+  "https://events.api.flagsmith.com"
+ ],
+ "problems": [],
+ "sample": [
+  {
+   "arm": "feel",
+   "exposureVariant": "feel"
+  },
+  {
+   "arm": "tell",
+   "exposureVariant": "control"
+  }
+ ],
+ "commit": "03f5c8d",
+ "steps": [
+  "git clone <repo>",
+  "npm ci",
+  "FS_DEV_CLIENT_KEY set (Development client-side key)",
+  "demo server from web/demo/server.mjs (in-process, ephemeral port)",
+  "12 fresh browser contexts: Start, Show my result, wait for the exposure; 4 of them also press Get ReadSharp"
+ ],
+ "pending": "Owner check in the Claude browser pane (npm run demo) not done: the preview server start was declined in the unattended run."
+}
