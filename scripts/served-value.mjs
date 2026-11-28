@@ -11,7 +11,7 @@
 import { randomUUID } from 'node:crypto';
 import { pathToFileURL } from 'node:url';
 import { Flagsmith } from '@flagsmith/nodejs';
-import { assertDevelopment } from '../sim/lib.mjs';
+import { assertDevelopment, SimError } from '../sim/lib.mjs';
 
 export function parseArgs(argv) {
 	const opts = { flag: null, n: 20 };
@@ -53,8 +53,9 @@ if (import.meta.url === pathToFileURL(process.argv[1] ?? '').href) {
 	main()
 		.then((summary) => console.log(JSON.stringify(summary)))
 		.catch((error) => {
-			// sim errors are fixed messages; anything else gets a generic one so no key can leak.
-			console.error(error?.name === 'Error' && /^(Unknown argument|--flag|--n)/.test(error.message) ? error.message : error?.constructor?.name === 'SimError' ? error.message : 'served-value failed.');
+			// Argument and sim errors are fixed messages; anything else gets a generic one so no key can leak.
+			const fixed = error instanceof SimError || /^(Unknown argument|--flag|--n)/.test(error?.message ?? '');
+			console.error(fixed ? error.message : 'served-value failed.');
 			process.exitCode = 1;
 		});
 }

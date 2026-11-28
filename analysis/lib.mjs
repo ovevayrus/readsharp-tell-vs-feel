@@ -297,19 +297,18 @@ export function normalize(wrapped, { subtractCanary } = {}) {
   if (!payload || !Array.isArray(payload.metrics)) fail('results.payload.metrics is missing');
   const ov = wrapped._overrides || {};
   const metricsMeta = exp.metrics || [];
-  const idOf = (m) => m.metric;
   let primaryId = ov.primary != null ? Number(ov.primary) : undefined;
   let guardId = ov.guardrail != null ? Number(ov.guardrail) : undefined;
   if (primaryId === undefined) {
     const m = metricsMeta.find((x) => x.expected_direction === 'increase');
     if (!m) fail('no metric with expected_direction "increase"; pass --primary <metric id>');
-    primaryId = idOf(m);
+    primaryId = m.metric;
   }
   if (guardId === undefined) {
     const m = metricsMeta.find((x) => x.expected_direction === 'not_decrease');
-    guardId = m ? idOf(m) : null;
+    guardId = m ? m.metric : null;
   }
-  const nameOf = (id) => (metricsMeta.find((x) => idOf(x) === id) || {}).metric_name || `metric ${id}`;
+  const nameOf = (id) => (metricsMeta.find((x) => x.metric === id) || {}).metric_name || `metric ${id}`;
   const find = (id) => {
     const m = payload.metrics.find((x) => Number(x.metric_id) === Number(id));
     if (!m) fail(`metric ${id} not found in results`);
@@ -346,20 +345,20 @@ export function normalize(wrapped, { subtractCanary } = {}) {
 
   // exposures
   const points = (payload.exposures_timeseries && payload.exposures_timeseries.points) || [];
-  const exp_ = { control: 0, variant: 0 };
+  const exposures = { control: 0, variant: 0 };
   let sawExposure = false;
   for (const p of points) {
     const ni = p.new_identities || {};
-    if (ni.control != null) { exp_.control += ni.control; sawExposure = true; }
-    if (ni[variantKey] != null) { exp_.variant += ni[variantKey]; sawExposure = true; }
+    if (ni.control != null) { exposures.control += ni.control; sawExposure = true; }
+    if (ni[variantKey] != null) { exposures.variant += ni[variantKey]; sawExposure = true; }
   }
   let exposureSource = 'exposures_timeseries';
   if (!sawExposure) {
-    exp_.control = primary.control.n;
-    exp_.variant = primary.variant.n;
+    exposures.control = primary.control.n;
+    exposures.variant = primary.variant.n;
     exposureSource = 'primary metric n';
   } else if (sub) {
-    if (sub === 'control') exp_.control -= 1; else exp_.variant -= 1;
+    if (sub === 'control') exposures.control -= 1; else exposures.variant -= 1;
   }
 
   const envName = wrapped.environment && wrapped.environment.name;
@@ -373,7 +372,7 @@ export function normalize(wrapped, { subtractCanary } = {}) {
     is_final: !!results.is_final,
     srm_p_value: payload.srm_p_value ?? null,
     variant_key: variantKey,
-    exposures: exp_,
+    exposures,
     exposure_source: exposureSource,
     canary_subtracted: sub,
     primary,

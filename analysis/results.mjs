@@ -36,7 +36,7 @@ export async function run(argv, io = {}) {
   const err = io.stderr || ((s) => process.stderr.write(s));
   const envVars = io.env || process.env;
   const apiKey = envVars.FLAGSMITH_API_KEY;
-  let redact = makeRedactor([apiKey]);
+  const redact = makeRedactor([apiKey]);
   try {
     const { values: v } = parseArgs({ args: argv, options: OPTIONS, allowPositionals: false });
     const opts = {
