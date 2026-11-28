@@ -6,6 +6,10 @@
 
 Both arms were treated the same: every scripted visitor converted on `get_readsharp` with a 10% chance and shared with a 5% chance, whichever arm it landed in. Even so, `b` came out 1.4 points lower than control (9.0% against 10.4%), and the analysis gives `b` a 23% chance of being the better arm. That gap is noise. With 500 visitors per arm, two identical arms routinely land a few points apart. The 95% interval for the difference runs from −5.1 to +2.3 points and includes zero, so the rule says keep running, and it would keep saying so for a long time: no realistic amount of traffic tells two identical arms apart (visitors needed: more than 20,000 per arm). This is what the Tell vs Feel readout would look like if `feel` made no difference.
 
+## What the dashboard says
+
+The Flagsmith dashboard for this experiment (owner's screenshot, results as of 28 Nov 2026 00:20 UTC, the same recompute as docs/aa/results.json) shows the same numbers: 500 exposures per arm, 10.4% against 9.0%, b at a 21% win probability with a credible interval of −46.3% to +19.4%. It also shows a banner: "Control is the winner", with a 79% probability of being the best arm, and "Consider rolling out Control to all users". The two arms are identical, so that banner is reacting to noise. The registered rule acts only at 95% or above, and it says keep running.
+
 ## Our P and Flagsmith's
 
 Our P(b beats control) is 0.2284; Flagsmith's chance to win is 0.2110, 1.74 points apart (within the 2-point check). Both use the same counts. The difference is in the model: Flagsmith's interval for the lift (−46.3% to +19.4%) is symmetric around the observed lift of −13.5%, which points to a normal approximation, while ours comes straight from the Beta(1+c, 1+n−c) posteriors with a uniform Beta(1,1) prior, whose ratio is skewed (−40.7% to +26.2%).

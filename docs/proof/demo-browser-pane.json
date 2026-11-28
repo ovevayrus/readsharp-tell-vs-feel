@@ -1,0 +1,40 @@
+{
+ "checkedAt": "2026-11-28T03:5xZ (views) / 04:07:14Z (results)",
+ "where": "Claude browser pane, npm run demo from C:/Users/oveva/flagsmith at 8620793 (= origin/main, no local changes to tracked files), http://127.0.0.1:4321/demo/, Flagsmith Development",
+ "views": [
+  {
+   "arm": "tell",
+   "exposure_sent": "yes"
+  },
+  {
+   "arm": "feel",
+   "exposure_sent": "yes",
+   "reader": "shown"
+  },
+  {
+   "arm": "feel",
+   "exposure_sent": "yes",
+   "reader": "shown"
+  },
+  {
+   "arm": "tell",
+   "exposure_sent": "yes"
+  }
+ ],
+ "each_view": "a new random transient identity (shown in the debug panel)",
+ "delivery": {
+  "experiment": "958 Tell vs Feel (Development)",
+  "before": {
+   "as_of": "2026-11-28T00:46:39.922356Z",
+   "control": 600,
+   "feel": 580
+  },
+  "after_one_refresh": {
+   "as_of": "2026-11-28T04:07:14.066245Z",
+   "control": 602,
+   "feel": 582
+  },
+  "growth": "control +2, feel +2 = exactly the 4 views by arm"
+ },
+ "clean_clone": "docs/proof/demo-headless-check.json (fresh clone of 03f5c8d, 12 views, tell 6 / feel 6)"
+}
