@@ -10,7 +10,9 @@ Link to promote: https://readsharp.app/reading-speed-test (plain URL, no query p
 - Privacy: say only what the page says. Never write "nothing leaves your browser", "no tracking" or "private".
 - Start only after the canary (delivered Fri 27 Nov). Log each wave's start time in docs/monitoring-log.md (plan section 12).
 
-Facts below were checked against the live speed-test and privacy pages on 2026-11-28 00:40 UTC. Reddit rules were not readable by automated tools, so every subreddit needs a manual check.
+Facts below were checked against the live speed-test and privacy pages on 2026-11-28 00:40 UTC. The subreddit rules were read by the owner on each subreddit's rules page on Fri 27 Nov 2026, about 23:15 EST (Reddit could not be read by tools here); each rule is quoted under its subreddit.
+
+These drafts were written by Claude. Reddit communities often ban AI-generated posts (r/GetStudying and r/productivity do), so rewrite any Reddit post in your own words before posting.
 
 ---
 
@@ -53,7 +55,14 @@ I built a free reading speed test. Read one short passage, answer three question
 
 ### r/speedreading
 
-Self-promotion rule: UNCHECKED. Open https://www.reddit.com/r/speedreading/about/rules, quote the self-promotion rule here in one line with the date, and do not post if it forbids this.
+Self-promotion rule (checked by the owner, Fri 27 Nov 2026 ~23:15 EST), rule 2: "No spam, self promotion, meme posts etc. Message modmail before posting so it can be researched." It adds that a post made without messaging first is deleted, and that commenting your app in other threads is removed.
+
+**Message the mods first, and post only if they say yes.** Never drop the link in other people's threads.
+
+Modmail draft:
+Hi mods, I built a free reading speed test: one passage of about 300 words, three comprehension questions, and your words per minute at the end. It's on the site of ReadSharp, a Windows speed reader I make. The result page is running a disclosed A/B test (the page explains what it records). Would a post sharing the test be OK here? https://readsharp.app/reading-speed-test. Happy to skip it if it doesn't fit.
+
+Post draft (only after the mods approve):
 
 Title: A free reading speed test with comprehension questions (I built it)
 
@@ -64,28 +73,13 @@ One short passage only gives a rough number, so treat it as a starting point. Fo
 
 https://readsharp.app/reading-speed-test
 
-### r/GetStudying
+### r/GetStudying: do not post
 
-Self-promotion rule: UNCHECKED. Open https://www.reddit.com/r/GetStudying/about/rules, quote the self-promotion rule here in one line with the date, and do not post if it forbids this.
+Self-promotion rule (checked by the owner, Fri 27 Nov 2026 ~23:15 EST), rule 3: "Do NOT promote your courses, apps, Discord servers, or blog/YT content. ... This is a zero tolerance rule." Rule 4 also bans AI-generated posts. Skip this subreddit.
 
-Title: Free two-minute test: how fast do you read, and how much do you retain?
+### r/productivity: do not post
 
-Body:
-Reading speed is only useful if you remember what you read, so I built a test that checks both. Read a short passage (about 300 words, three to choose from), answer three questions, and you see your words per minute and how much stuck.
-
-It's free and doesn't ask for an account. I built it, and I'm a student too. Speed on one passage is a rough guide, not a verdict.
-
-https://readsharp.app/reading-speed-test
-
-### r/productivity (only in its weekly or designated self-promotion thread, if it has one)
-
-Self-promotion rule: UNCHECKED. Open https://www.reddit.com/r/productivity/about/rules, quote the self-promotion rule here in one line with the date, and do not post if it forbids this.
-
-If the subreddit has no such thread, skip it. Do not post a standalone thread.
-
-Comment:
-Disclosure: I made this. It's a free reading speed test. Read one short passage, answer three questions, get your words per minute and a comprehension check. No account, about two minutes. Useful if you want a baseline before changing how you read.
-https://readsharp.app/reading-speed-test
+Self-promotion rule (checked by the owner, Fri 27 Nov 2026 ~23:15 EST), rule 2: "Self-promotion is not allowed here in any form, even if asked for recommendations." There is no self-promotion thread exception in its rules, and rule 6 bans AI-generated posts. Skip this subreddit.
 
 ### Student Discords (one generic version)
 
@@ -100,7 +94,7 @@ https://readsharp.app/reading-speed-test
 
 ### r/SideProject
 
-Self-promotion rule: UNCHECKED. Open https://www.reddit.com/r/SideProject/about/rules, quote the self-promotion rule here in one line with the date, and do not post if it forbids this.
+Self-promotion rule (checked by the owner, Fri 27 Nov 2026 ~23:15 EST): the subreddit lists no community rules, so a disclosed post about your own project is not ruled out. Reddit's site-wide rules still apply.
 
 Title: I built a free reading speed test (and I make a Windows speed reader)
 
@@ -152,3 +146,4 @@ https://readsharp.app/reading-speed-test
 | "I'm a student" | Owner-provided, not from the site; confirm before posting |
 | Toggle Wars hackathon | Owner-provided, not from the site; confirm the name before posting |
 | Show HN quotes | news.ycombinator.com/showhn.html, fetched 2026-11-28 00:45 UTC |
+| Subreddit rules | Each subreddit's rules page, read by the owner on Fri 27 Nov 2026 ~23:15 EST (screenshots in chat) |
