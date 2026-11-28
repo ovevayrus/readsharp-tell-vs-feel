@@ -105,8 +105,8 @@ Shot: the GitHub repo root, README top, then the `scripts` folder.
 - [ ] Tabs open: the Flagsmith experiment page, docs/aa/analysis.md, docs/effect/analysis.md, docs/effect/rollout.md, docs/results/analysis.md (Phase D), EXPERIMENT.md on GitHub with its commit time visible.
 - [ ] The identifier is generated live. Do a dry run first so you know where `$flag_exposure` and `get_readsharp` appear in the Network list.
 - [ ] Phase D done: bracketed fill-ins replaced, and Version A or B chosen.
-- [ ] Time the read-aloud. Aim for 2:30 to 3:00, target 2:45.
-- [ ] The video link must open logged out: test it in a private window before submitting.
+- [ ] Time the read-aloud and the final cut. Aim for 2:30 to 2:55, target 2:45: the submission form requires under 3 minutes.
+- [ ] Upload to YouTube or Loom, public or unlisted (the form's options). The link must open logged out: test it in a private window before submitting.
 
 ## Changes from plan section 11
 
