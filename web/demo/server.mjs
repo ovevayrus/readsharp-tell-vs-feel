@@ -65,6 +65,7 @@ export function createServer({ key }) {
     };
     if (req.method !== 'GET' && req.method !== 'HEAD') return send(405, 'Method not allowed');
     const urlPath = (req.url || '/').split('?')[0].split('#')[0];
+    if (urlPath === '/favicon.ico') return send(204, '');
     const file = resolveFile(urlPath);
     const type = file && TYPES[path.extname(file)];
     if (!file || !type) return send(404, 'Not found');

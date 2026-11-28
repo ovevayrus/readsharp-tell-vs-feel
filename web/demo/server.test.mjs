@@ -112,6 +112,14 @@ test('blocks traversal and anything outside web/ and the vendor file', async () 
   });
 });
 
+test('the browser favicon request gets an empty 204, not a 404', async () => {
+  await withServer(async (port) => {
+    const res = await get(port, '/favicon.ico');
+    assert.equal(res.status, 204);
+    assert.equal(res.body, '');
+  });
+});
+
 test('CSP allows only self and the two Flagsmith origins for connections', async () => {
   await withServer(async (port) => {
     const res = await get(port, '/demo/');

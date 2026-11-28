@@ -14,7 +14,6 @@ const $ = (id) => document.getElementById(id);
 const key = document.body.dataset.fsKey;
 
 let eligible = null;
-let identity = null;
 const experiment = createExperiment({
   sdk: () => import('/vendor/flagsmith.mjs').then((m) => m.default),
   environmentID: key === PLACEHOLDER ? '' : key,
@@ -22,17 +21,13 @@ const experiment = createExperiment({
     eligible = isEligible();
     return eligible;
   },
-  randomUUID: () => {
-    identity = crypto.randomUUID();
-    return identity;
-  },
 });
 
 function renderDebug(arm, exposed) {
   $('d-eligible').textContent = eligible === null ? 'not checked' : eligible ? 'yes' : 'no';
   $('d-arm').textContent = arm ?? '-';
-  $('d-identity').textContent = identity ?? 'none (nothing set up)';
-  $('d-exposed').textContent = exposed === undefined ? '-' : exposed ? 'yes' : 'no';
+  $('d-identity').textContent = experiment.identifier ?? 'none (nothing set up)';
+  $('d-exposed').textContent = exposed === undefined ? '-' : exposed === 'sending' ? 'sending…' : exposed ? 'yes' : 'no';
 }
 
 $('start').addEventListener('click', () => {
@@ -59,7 +54,7 @@ $('show').addEventListener('click', async () => {
     if (arm === 'feel') {
       createFeelReader({ root: reader, text: DEMO_TEXT, wpm: pace, measuredWpm: SAMPLE.speedWpm, engine });
     }
-    renderDebug(arm, false);
+    renderDebug(arm, eligible === true ? 'sending' : false);
   });
   renderDebug(shownArm ?? outcome.arm, outcome.exposed);
 });
