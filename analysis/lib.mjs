@@ -2,7 +2,9 @@
 // Decision rule: EXPERIMENT.md ("Decision rule"). Applied literally.
 
 export const PRIOR = { alpha: 1, beta: 1 };
-export const PRODUCTION_CUTOFF = '2026-11-29T04:00:00Z'; // Sat 28 Nov 2026 23:00 EST
+// The registered final snapshot is the first refresh at or after Sat 28 Nov 2026 23:00 EST plus the
+// measured 6-minute ingestion lag (docs/RUNBOOK.md): 23:06 EST. Nothing reads Production results before it.
+export const PRODUCTION_CUTOFF = '2026-11-29T04:06:00Z'; // Sat 28 Nov 2026 23:06 EST
 export const MIN_DRAWS = 200000;
 export const DEFAULT_SEED = 20261128;
 export const API_BASE = 'https://api.flagsmith.com/api/v1/';
@@ -381,13 +383,39 @@ export function normalize(wrapped, { subtractCanary } = {}) {
 
 // ---------- gates and decision ----------
 
+// Complementary error function (Numerical Recipes erfcc, fractional error < 1.2e-7).
+function erfc(x) {
+  const z = Math.abs(x);
+  const t = 1 / (1 + 0.5 * z);
+  const r = t * Math.exp(-z * z - 1.26551223 + t * (1.00002368 + t * (0.37409196 + t * (0.09678418
+    + t * (-0.18628806 + t * (0.27886807 + t * (-1.13520398 + t * (1.48851587
+    + t * (-0.82215223 + t * 0.17087277)))))))));
+  return x >= 0 ? r : 2 - r;
+}
+
+/** Chi-square test (1 df) of the two arms' exposures against the configured 50/50 split. */
+export function srmPValue(control, variant) {
+  const total = control + variant;
+  if (total <= 0) return null;
+  const expected = total / 2;
+  const chi2 = ((control - expected) ** 2 + (variant - expected) ** 2) / expected;
+  return erfc(Math.sqrt(chi2 / 2));
+}
+
 export function evaluateGates(snap, { wiring, canary }) {
   const isDev = snap.environment === 'Development';
   const gates = [];
   const srm = snap.srm_p_value;
-  gates.push(srm == null
-    ? { name: 'SRM', pass: true, detail: 'not computed by Flagsmith' }
-    : { name: 'SRM', pass: !(srm < 0.001), detail: `srm_p_value ${srm}${srm < 0.001 ? ' (< 0.001)' : ''}` });
+  // Flagsmith warns at p < 0.001. It returned null even at 1,000 identities in Development, so a
+  // null is not taken as a pass: the same test is computed here from the exposures per arm.
+  if (srm != null) {
+    gates.push({ name: 'SRM', pass: !(srm < 0.001), detail: `Flagsmith srm_p_value ${srm}${srm < 0.001 ? ' (< 0.001)' : ''}` });
+  } else {
+    const local = srmPValue(snap.exposures.control, snap.exposures.variant);
+    gates.push(local == null
+      ? { name: 'SRM', pass: false, detail: 'no exposures to check' }
+      : { name: 'SRM', pass: !(local < 0.001), detail: `Flagsmith returned null; chi-square on exposures here p = ${local.toPrecision(3)}${local < 0.001 ? ' (< 0.001)' : ''}` });
+  }
 
   const e = snap.exposures;
   const pc = snap.primary.control.c;
@@ -403,13 +431,13 @@ export function evaluateGates(snap, { wiring, canary }) {
     detail: problems.length ? problems.join('; ') : `exposures ${e.control}/${e.variant}, conversions ${pc}/${pv}`,
   });
 
-  const check = (name, val, good) => {
+  const check = (name, val, good, bad) => {
     if (isDev && (val == null || val === 'na')) return { name, pass: true, detail: 'n/a (validation run)' };
-    if (val == null || val === 'na') return { name, pass: false, detail: `not given for a Production snapshot (--${name.toLowerCase()} ${good}|fail)` };
+    if (val == null || val === 'na') return { name, pass: false, detail: `not given for a Production snapshot (--${name.toLowerCase()} ${good}|${bad})` };
     return { name, pass: val === good, detail: val };
   };
-  gates.push(check('Wiring', wiring, 'pass'));
-  gates.push(check('Canary', canary, 'seen'));
+  gates.push(check('Wiring', wiring, 'pass', 'fail'));
+  gates.push(check('Canary', canary, 'seen', 'missing'));
   return gates;
 }
 
@@ -480,7 +508,7 @@ export function buildReport(r) {
   lines.push(`- Visitors needed: ${visitorsText(visitors)}`);
   const fl = pr.flagsmith;
   lines.push(fl
-    ? `- Flagsmith: chance_to_win ${fl.chance_to_win.toFixed(4)}, lift ${sgn(fl.lift * 100)}% (${sgn(fl.ci_low * 100)}% to ${sgn(fl.ci_high * 100)}%); ours minus theirs ${sgn(diffFs, 2)} points`
+    ? `- Flagsmith: chance_to_win ${fl.chance_to_win.toFixed(4)}, lift ${sgn(fl.lift * 100)}% (${sgn(fl.ci_low * 100)}% to ${sgn(fl.ci_high * 100)}%); ours${snap.canary_subtracted ? ' (canary subtracted)' : ''} minus theirs${snap.canary_subtracted ? ' (unadjusted)' : ''} ${sgn(diffFs, 2)} points`
     : '- Flagsmith: no inference for the primary metric');
   if (snap.guardrail && snap.guardrail.flagsmith) {
     const g = snap.guardrail.flagsmith;
@@ -518,6 +546,7 @@ export function buildJson(r) {
       draws: mc.draws,
       flagsmith: snap.primary.flagsmith,
       p_minus_flagsmith_points: rnd(diffFs, 3),
+      p_minus_flagsmith_basis: snap.canary_subtracted ? 'ours with the canary subtracted vs Flagsmith unadjusted' : 'same counts',
     },
     guardrail: snap.guardrail
       ? { metric: snap.guardrail.name, control: snap.guardrail.control, variant: snap.guardrail.variant, verdict: gr.verdict, p_harm: rnd(gr.p_harm), flagsmith: snap.guardrail.flagsmith }
@@ -543,7 +572,7 @@ export function makeRedactor(secrets) {
 
 function guardProduction(env, now) {
   if (env === 'production' && now().getTime() < Date.parse(PRODUCTION_CUTOFF)) {
-    fail(`Refusing to read Production before ${PRODUCTION_CUTOFF} (Sat 28 Nov 2026 23:00 EST). The win probability must not be read earlier.`);
+    fail(`Refusing to read Production before ${PRODUCTION_CUTOFF} (Sat 28 Nov 2026 23:06 EST, the registered final snapshot). The win probability must not be read earlier.`);
   }
 }
 

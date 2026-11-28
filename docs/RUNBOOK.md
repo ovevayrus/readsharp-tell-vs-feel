@@ -48,7 +48,7 @@ Invoke-Flagsmith api "$E/experiments/1512/results/" --jq '.results.payload.metri
 Invoke-Flagsmith api "$E/experiments/1512/results/" --jq '.results.payload.metrics[] | select(.metric_id == 1572) | {result_shared: (.variants | map_values(.sum))}'
 ```
 
-**SRM flag.** Flagsmith warns when the split is a one-in-a-thousand imbalance or rarer, and only checks from 100 identities ([statistics glossary](https://docs.flagsmith.com/experimentation/statistics)). `srm_p_value` stays `null` until then. An SRM warning means stop: the results are invalid, so investigate.
+**SRM flag.** Flagsmith warns when the split is a one-in-a-thousand imbalance or rarer, and only checks from 100 identities ([statistics glossary](https://docs.flagsmith.com/experimentation/statistics)). `srm_p_value` stays `null` until then, and it was also `null` at 1,000 identities in both Development validation runs (docs/aa/results.json, docs/effect/results.json), so a `null` does not prove the split is fine: compare the exposures per arm, which should be roughly 50/50. The analysis script (`analysis/results.mjs`) runs the same one-in-a-thousand test itself, on the exposures, whenever Flagsmith's value is `null`. An SRM warning means stop: the results are invalid, so investigate.
 
 ```powershell
 Invoke-Flagsmith api "$E/experiments/1512/results/" --jq '{as_of: .results.as_of, srm_p_value: .results.payload.srm_p_value, srm_warning: (.results.payload.srm_p_value != null and .results.payload.srm_p_value < 0.001), is_final: .results.is_final, last_error_at: .results.last_error_at}'
@@ -105,7 +105,17 @@ Take the first results refresh at or after **Sat 28 Nov 2026 23:00 EST plus the 
 Invoke-Flagsmith api "$E/experiments/1512/results/refresh/" -X POST
 New-Item -ItemType Directory -Force docs/results | Out-Null
 Invoke-Flagsmith api "$E/experiments/1512/results/" --json | Out-File -Encoding utf8 docs/results/final-results.json
+Get-Content docs/results/final-results.json -Raw | ConvertFrom-Json | Out-Null
 ```
+
+`Invoke-Flagsmith` merges the CLI's stderr into its output, so the last line checks the saved file is valid JSON; if it throws, save again. The analysis script can instead refresh, save and analyse in one step. It refreshes only when the last recompute is more than 5 minutes old, writes the experiment's details plus the raw results with no BOM, and refuses to read Production before 23:06 EST. Phase D sets `--wiring` and `--canary` from the evidence:
+
+```powershell
+New-Item -ItemType Directory -Force docs/results | Out-Null
+node analysis/results.mjs --env production --experiment 1512 --refresh --save docs/results/final-snapshot.json --wiring <pass|fail> --canary <seen|missing>
+```
+
+Add `--subtract-canary feel` for the run with the launch canary removed. Which of the two runs the decision uses is not fixed in EXPERIMENT.md; settle it before the snapshot (proposed: the unadjusted run decides, the canary-subtracted run is reported next to it).
 
 ## Help
 

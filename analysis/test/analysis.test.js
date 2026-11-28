@@ -7,6 +7,7 @@ import { fileURLToPath } from 'node:url';
 import { spawnSync } from 'node:child_process';
 import {
   probBeats, mcSummary, analyze, buildJson, fetchSnapshot, PRODUCTION_CUTOFF,
+  srmPValue, visitorsNeeded, buildReport,
 } from '../lib.mjs';
 import { run } from '../results.mjs';
 
@@ -85,6 +86,45 @@ test('under-50 exposures and SRM fail the gates', () => {
   const srm = analyze(fx('srm'));
   assert.equal(srm.decision.branch, 1);
   assert.match(srm.decision.text, /SRM/);
+});
+
+test('srmPValue: a 1-df chi-square against 50/50', () => {
+  near(srmPValue(500, 500), 1, 1e-6);
+  near(srmPValue(498, 502), 0.8994, 0.001); // chi2 = 0.016
+  assert.ok(srmPValue(9120, 6400) < 1e-6);
+  near(srmPValue(450, 550), 0.001565, 0.00005); // chi2 = 10
+  assert.equal(srmPValue(0, 0), null);
+});
+
+test('a null Flagsmith SRM value is checked here from the exposures, not passed blindly', () => {
+  const imbalanced = fx('p960');
+  imbalanced.results.payload.srm_p_value = null;
+  imbalanced.results.payload.exposures_timeseries = { points: [{ bucket: 'x', new_identities: { control: 300, b: 200 } }] };
+  const r = analyze(imbalanced);
+  assert.equal(r.gates[0].pass, false);
+  assert.match(r.gates[0].detail, /chi-square on exposures here/);
+  assert.equal(r.decision.branch, 1);
+  const balanced = analyze(fx('aa-like'));
+  assert.equal(balanced.gates[0].pass, true);
+});
+
+test('gate hints name the accepted values', () => {
+  const r = analyze(fx('production'));
+  assert.match(r.gates.find((g) => g.name === 'Wiring').detail, /--wiring pass\|fail/);
+  assert.match(r.gates.find((g) => g.name === 'Canary').detail, /--canary seen\|missing/);
+});
+
+test('visitors needed for 24/300 vs 35/300 lands in the independently checked range', () => {
+  // A separate exact-binomial simulation put 80% power between about 1,200 and 1,320 per arm.
+  const v = visitorsNeeded({ c: 24, n: 300 }, { c: 35, n: 300 });
+  assert.equal(v.status, 'needed');
+  assert.ok(v.per_arm_total >= 1000 && v.per_arm_total <= 1700, `per arm ${v.per_arm_total}`);
+});
+
+test('with the canary subtracted, the Flagsmith comparison is labelled as unlike data', () => {
+  const r = analyze(fx('production'), { wiring: 'pass', canary: 'seen', subtractCanary: 'control' });
+  assert.match(buildReport(r), /ours \(canary subtracted\) minus theirs \(unadjusted\)/);
+  assert.match(buildJson(r).primary.p_minus_flagsmith_basis, /canary subtracted/);
 });
 
 test('Production snapshot needs --wiring and --canary', () => {

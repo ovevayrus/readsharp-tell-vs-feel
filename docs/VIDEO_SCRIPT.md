@@ -117,6 +117,6 @@ Shot: the GitHub repo root, README top, then the `scripts` folder.
 5. 1:35-2:15: the plan has no quote, so I wrote narration with Phase D fill-ins, one version for keep running and one for ship.
 6. 2:15-2:40: the plan quote "The flag is both the experiment and the rollout." is kept word for word, moved to the end of the narration. Added narration from docs/effect/rollout.md and a shorter ship alternative.
 7. 2:40-2:55: the plan has no quote, so I wrote narration from the plan row and the Transport row in EXPERIMENT.md (direct to Flagsmith, so Flagsmith receives the IP; the first-party proxy is the next step).
-10. Fact fixes after review: the power line keeps "to reach 95 percent"; the live site's buttons are Start reading, Done reading and Check my answers (Show my result is the demo's); shipping feel in Production means ending the experiment with feel (gate G5), not flipping a flag; the proxy line says Flagsmith would no longer see visitors' IP addresses.
 8. 0:00-0:12 and 0:12-0:27: quotes used word for word, with the italic markers dropped.
 9. 1:15-1:25: quote used word for word.
+10. Fact fixes after review: the power line keeps "to reach 95 percent"; the live site's buttons are Start reading, Done reading and Check my answers (Show my result is the demo's); shipping feel in Production means ending the experiment with feel (gate G5), not flipping a flag; the proxy line says Flagsmith would no longer see visitors' IP addresses.

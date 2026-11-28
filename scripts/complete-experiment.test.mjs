@@ -5,12 +5,13 @@ import { activeExperiment, completeBody, confirmed, parseArgs } from './complete
 test('parseArgs needs a flag and a rollout, is a dry run by default, and refuses Production', () => {
 	assert.deepEqual(parseArgs(['--flag', 'effect_check', '--rollout', 'b']), { flag: 'effect_check', rollout: 'b', yes: false });
 	assert.equal(parseArgs(['--flag', 'effect_check', '--rollout', 'b', '--yes']).yes, true);
-	assert.equal(parseArgs(['--env', 'development', '--flag', 'x', '--rollout', 'control']).rollout, 'control');
+	assert.equal(parseArgs(['--env', 'development', '--flag', 'aa_check', '--rollout', 'control']).rollout, 'control');
+	assert.throws(() => parseArgs(['--flag', 'speed_test_next_step', '--rollout', 'feel']), /Only the Development validation flags/);
 	assert.throws(() => parseArgs(['--env', 'production', '--flag', 'speed_test_next_step', '--rollout', 'feel']), /Development only/);
 	assert.throws(() => parseArgs(['--rollout', 'b']), /--flag is required/);
 	assert.throws(() => parseArgs(['--flag', 'effect_check']), /--rollout is required/);
 	assert.throws(() => parseArgs(['--flag', '--rollout']), /needs a value/);
-	assert.throws(() => parseArgs(['--flag', 'x', '--rollout', 'b', '--force']), /Unknown argument/);
+	assert.throws(() => parseArgs(['--flag', 'effect_check', '--rollout', 'b', '--force']), /Unknown argument/);
 });
 
 test('completeBody maps control, a variation key and disable to the API decision', () => {

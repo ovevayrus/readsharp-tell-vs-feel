@@ -30,7 +30,7 @@ Primary get_readsharp: control 43/498 (8.6%), b 78/502 (15.5%). Prior Beta(1,1) 
   Flagsmith result_shared: chance_to_win 0.4902, lift -0.8%
 
 Gates:
-1. SRM: pass (not computed by Flagsmith)
+1. SRM: pass (Flagsmith returned null; chi-square on exposures here p = 0.899)
 2. Sample: pass (exposures 498/502, conversions 43/78)
 3. Wiring: pass (n/a (validation run))
 4. Canary: pass (n/a (validation run))
@@ -80,7 +80,8 @@ Branch 2: Ship the variant.
       "ci_low": 0.16719404854418618,
       "ci_high": 1.4318053028872968
     },
-    "p_minus_flagsmith_points": 0.62
+    "p_minus_flagsmith_points": 0.62,
+    "p_minus_flagsmith_basis": "same counts"
   },
   "guardrail": {
     "metric": "result_shared",
@@ -114,7 +115,7 @@ Branch 2: Ship the variant.
     {
       "name": "SRM",
       "pass": true,
-      "detail": "not computed by Flagsmith"
+      "detail": "Flagsmith returned null; chi-square on exposures here p = 0.899"
     },
     {
       "name": "Sample",

@@ -13,6 +13,10 @@
 import { execFileSync } from 'node:child_process';
 import { pathToFileURL } from 'node:url';
 
+// Only the Development validation flags. The real experiment's flag (speed_test_next_step) is never
+// ended by this script, even if FS_DEV_CLIENT_KEY were set to the wrong environment's key.
+export const VALIDATION_FLAGS = ['effect_check', 'aa_check'];
+
 export function parseArgs(argv) {
 	const opts = { flag: null, rollout: null, yes: false };
 	for (let i = 0; i < argv.length; i++) {
@@ -30,6 +34,7 @@ export function parseArgs(argv) {
 		} else throw new Error('Unknown argument. Allowed: --flag, --rollout, --yes, --env development.');
 	}
 	if (!opts.flag) throw new Error('--flag is required');
+	if (!VALIDATION_FLAGS.includes(opts.flag)) throw new Error(`Only the Development validation flags can be ended here: ${VALIDATION_FLAGS.join(', ')}.`);
 	if (!opts.rollout) throw new Error('--rollout is required: control, a variation key, or disable');
 	return opts;
 }

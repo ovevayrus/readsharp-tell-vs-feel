@@ -5,7 +5,7 @@ Link to promote: https://readsharp.app/reading-speed-test (plain URL, no query p
 ## Rules for every post
 
 - I post these by hand. No bots, fake accounts or vote rings.
-- Promote the test, not the experiment. Never ask anyone to click "Get ReadSharp", help the experiment, share, upvote or comment.
+- Promote the test, not the experiment. Never ask anyone to click "Get ReadSharp", to help the experiment, or to upvote (plan section 12: no "click Get ReadSharp to help me", no vote rings). Inviting people to post their own reading speed, as the LinkedIn draft does, is about their result, not the experiment; keep or cut it as you prefer.
 - Say plainly in every community post that I built it.
 - Privacy: say only what the page says. Never write "nothing leaves your browser", "no tracking" or "private".
 - Start only after the canary (delivered Fri 27 Nov). Log each wave's start time in docs/monitoring-log.md (plan section 12).
