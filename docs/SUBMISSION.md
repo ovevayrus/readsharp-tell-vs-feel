@@ -66,7 +66,7 @@ Liked:
 Would improve:
 - A created but not started experiment already serves the split without recording exposures. Our Production experiment had a 26-second gap between creation and start. Create should not serve until start, or create-and-start should be one call.
 - `srm_p_value` came back null even at 1,000 identities in Development, so we added our own check.
-- On two identical arms, the dashboard said "Control is the winner" at 79% and suggested rolling it out. The docs say the banner appears at 95%.
+- On two identical arms, the dashboard said "Control is the winner" at 79% and suggested rolling it out. The docs say the banner appears at 95% ("When a variation reaches a 95% chance of beating control, a recommendation banner suggests rolling it out", docs.flagsmith.com/experimentation/analyse-an-experiment, read 28 Nov 2026).
 - The browser SDK uses localStorage by default and flushes events every 10 seconds. A privacy-first site needs an in-memory adapter and an immediate flush; documented defaults for that case would help.
 - Results are aggregate only, so a single launch check (our canary) can't be looked up by identity.
 - The CLI prints the request path, which holds the environment key, when a call fails (for example a 429 on an early refresh).

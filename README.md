@@ -127,7 +127,7 @@ On PowerShell set `$env:SIM_ENV` and `$env:DEV_ENV_ID` first, then run the `node
 node analysis/results.mjs --env development --experiment <id> --refresh
 ```
 
-`--save out.json` keeps the snapshot (the experiment's details plus the raw results). Production snapshots also need `--wiring` and `--canary` flags, and the script refuses to fetch Production before Sat 28 Nov 2026 23:06 EST (the registered final snapshot), so its results cannot be read early. See [analysis/README.md](analysis/README.md).
+`--save out.json` keeps the snapshot (the experiment's details plus the raw results). Production snapshots also need `--wiring` and `--canary` flags, and the script refuses to fetch Production before Sat 28 Nov 2026 23:06 EST (the registered final snapshot), so it cannot read those results early. See [analysis/README.md](analysis/README.md).
 
 The browser end-to-end suite is not part of setup. It runs against the private ReadSharp site build, so it is described here and not reproducible from this repository alone.
 
